@@ -27,11 +27,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y chromium-browser
 
+      - name: Get Latest Chrome Driver Version
+        id: get_chromedriver_version
+        run: |
+          latest_version=$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE)
+          echo "::set-output name=version::$latest_version"
+
       - name: Download Chrome Driver
         run: |
-           wget https://chromedriver.storage.googleapis.com/120.0.6099.71/chromedriver_linux64.zip
-           unzip chromedriver_linux64.zip
-           chmod +x chromedriver
+          wget https://chromedriver.storage.googleapis.com/${{ steps.get_chromedriver_version.outputs.version }}/chromedriver_linux64.zip
+          unzip chromedriver_linux64.zip
+          chmod +x chromedriver
 
       - name: Run script
         env:
