@@ -27,20 +27,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y chromium-browser
 
-      - name: Get Latest Chrome Driver Version
-        id: get_chromedriver_version
+      - name: Get Chromium version and download chromedriver
+        id: get_chromium_driver
         run: |
-          latest_version=$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE)
-          echo "::set-output name=version::$latest_version"
-
-      - name: Download Chrome Driver
-        run: |
-          wget https://chromedriver.storage.googleapis.com/${{ steps.get_chromedriver_version.outputs.version }}/chromedriver_linux64.zip
+          chromium_version=$(chromium-browser --version | grep -oP '\d+\.\d+\.\d+')
+          echo "Chromium version: $chromium_version"
+          chromedriver_version=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${chromium_version}")
+          echo "Chromedriver version: $chromedriver_version"
+          wget https://chromedriver.storage.googleapis.com/$chromedriver_version/chromedriver_linux64.zip
           unzip chromedriver_linux64.zip
           chmod +x chromedriver
+          echo "::set-output name=driver_path::$(pwd)/chromedriver"
+
 
       - name: Run script
         env:
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: |
-          python news.py
+          python news.py --driver_path ${{ steps.get_chromium_driver.outputs.driver_path }}
