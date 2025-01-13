@@ -25,33 +25,33 @@ jobs:
       - name: Install Chromium
         run: |
           sudo apt-get update
-          sudo apt-get install -y chromium-browser
+          sudo apt-get install -y wget unzip
 
-      - name: Get Chromium version and download chromedriver
-        id: get_chromium_driver
+      - name: Download specific Chromium and Chromedriver
+        id: download_chromium_driver
         run: |
-          chromium_version=$(chromium-browser --version | grep -oP '\d+\.\d+\.\d+')
-          echo "Chromium version: $chromium_version"
-          latest_version=$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE)
-          echo "Latest Chromedriver version: $latest_version"
+           chromium_version="113.0.5672.24"
+           echo "Using specific Chromium version: $chromium_version"
 
-          specific_chromedriver_version=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"  | jq -r ".versions[] | select(.version == \"$chromium_version\" ) | .downloads.chromedriver[0].url" )
+           specific_chromedriver_version=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"  | jq -r ".versions[] | select(.version == \"$chromium_version\" ) | .downloads.chromedriver[0].url" )
+           echo "Specific Chromedriver version: $specific_chromedriver_version"
+           
+           wget $specific_chromedriver_version
+           unzip chromedriver*
+           chmod +x chromedriver
+           
+           
+           wget "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_x64%2F${chromium_version}%2Fchrome-linux.zip?alt=media" -O chrome-linux.zip
+           unzip chrome-linux.zip
+           chmod +x chrome-linux/chrome
 
-          if [[ -z "$specific_chromedriver_version" ]]; then
-              echo "Use latest chromedriver"
-              wget https://chromedriver.storage.googleapis.com/$latest_version/chromedriver_linux64.zip
-          else
-               echo "Use specific chromedriver"
-               wget "$specific_chromedriver_version"
-               unzip chromedriver*
-          fi
+           echo "::set-output name=chromium_path::$(pwd)/chrome-linux/chrome"
+           echo "::set-output name=driver_path::$(pwd)/chromedriver"
 
-          chmod +x chromedriver
-          echo "::set-output name=driver_path::$(pwd)/chromedriver"
 
       - name: Run script
         env:
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: |
           set -x
-          /opt/hostedtoolcache/Python/3.12.8/x64/bin/python news.py --driver_path ${{ steps.get_chromium_driver.outputs.driver_path }}
+          /opt/hostedtoolcache/Python/3.12.8/x64/bin/python news.py --driver_path ${{ steps.download_chromium_driver.outputs.driver_path }} --chromium_path ${{ steps.download_chromium_driver.outputs.chromium_path }}
