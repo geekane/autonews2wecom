@@ -34,23 +34,20 @@ jobs:
           echo "Chromium version: $chromium_version"
           latest_version=$(curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE)
           echo "Latest Chromedriver version: $latest_version"
-          
-          
-          if [[ "$chromium_version" == "$latest_version" ]]; then
-             echo "Using latest chromedriver"
-             wget https://chromedriver.storage.googleapis.com/$latest_version/chromedriver_linux64.zip
+
+          specific_chromedriver_version=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"  | jq -r ".versions[] | select(.version == \"$chromium_version\" ) | .downloads.chromedriver[0].url" )
+
+          if [[ -z "$specific_chromedriver_version" ]]; then
+              echo "Use latest chromedriver"
+              wget https://chromedriver.storage.googleapis.com/$latest_version/chromedriver_linux64.zip
           else
-             echo "Using a specific chromedriver"
-             specific_chromedriver_version=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"  | jq -r ".versions[] | select(.version == \"$chromium_version\" ) | .downloads.chromedriver[0].url" )
-             echo "Specific Chromedriver version: $specific_chromedriver_version"
-             wget $specific_chromedriver_version
-             unzip chromedriver*
-             
+               echo "Use specific chromedriver"
+               wget "$specific_chromedriver_version"
+               unzip chromedriver*
           fi
-          
+
           chmod +x chromedriver
           echo "::set-output name=driver_path::$(pwd)/chromedriver"
-
 
       - name: Run script
         env:
