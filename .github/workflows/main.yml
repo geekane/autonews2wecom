@@ -32,4 +32,4 @@ jobs:
         env:
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: |
-          python news.py # 修改为 news.py
+          python news.py
