@@ -2,7 +2,8 @@ name: Fetch and Send Hot News
 
 on:
   schedule:
-    - cron: '43 8 * * *'
+    - cron: '47 8 * * *'  # 每天 UTC 时间 8:47 运行
+  workflow_dispatch: # 添加 workflow_dispatch 事件
 
 jobs:
   fetch-and-send:
@@ -31,4 +32,4 @@ jobs:
         env:
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: |
-          python 自动推送.py
+          python news.py # 修改为 news.py
