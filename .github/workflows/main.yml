@@ -39,9 +39,9 @@ jobs:
           chmod +x chromedriver
           echo "::set-output name=driver_path::$(pwd)/chromedriver"
 
-
       - name: Run script
         env:
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: |
-          python news.py --driver_path ${{ steps.get_chromium_driver.outputs.driver_path }}
+          set -x
+          /opt/hostedtoolcache/Python/3.12.8/x64/bin/python news.py --driver_path ${{ steps.get_chromium_driver.outputs.driver_path }}
