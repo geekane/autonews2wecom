@@ -31,4 +31,4 @@ jobs:
         env:
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: |
-          python your_script.py
+          python 自动推送.py
