@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import os
 import requests
 import json
+import argparse
 
 def fetch_hot_news(url, driver_path=None):
     """
@@ -23,19 +24,13 @@ def fetch_hot_news(url, driver_path=None):
     try:
         chrome_options = Options()
         chrome_options.add_argument("--headless")  # 无头模式
-        chrome_options.add_argument("--no-sandbox") # 禁用沙箱模式
-        chrome_options.add_argument("--disable-dev-shm-usage") # 禁用内存共享
+        chrome_options.add_argument("--no-sandbox")  # 禁用沙箱模式
+        chrome_options.add_argument("--disable-dev-shm-usage")  # 禁用内存共享
 
         if driver_path:
             service = ChromeService(executable_path=driver_path)
         else:
-            # 尝试在当前目录下查找 chromedriver
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            driver_path = os.path.join(current_dir, 'chromedriver')
-            if os.path.exists(driver_path):
-                service = ChromeService(executable_path=driver_path)
-            else:
-               service = ChromeService()
+            service = ChromeService()
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
@@ -79,7 +74,7 @@ def send_to_wechat_bot(content):
     """
     发送消息到企业微信机器人
     """
-    webhook_key = os.getenv('WECOM_WEBHOOK_KEY') # 从环境变量中获取 key
+    webhook_key = os.getenv('WECOM_WEBHOOK_KEY')  # 从环境变量中获取 key
     webhook_url = f'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={webhook_key}'
     data = {
         "msgtype": "text",
@@ -97,9 +92,13 @@ def send_to_wechat_bot(content):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--driver_path", help="Path to chromedriver")
+    args = parser.parse_args()
+
     url = 'https://rebang.today/tech?tab=ithome'
     # 请根据实际情况修改driver路径，如果driver在系统路径中，可以不传
-    html = fetch_hot_news(url, driver_path='./chromedriver')
+    html = fetch_hot_news(url, driver_path=args.driver_path)
     if html:
         news_list = parse_html(html)
         if news_list:
