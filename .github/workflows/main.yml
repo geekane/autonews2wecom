@@ -22,11 +22,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium beautifulsoup4 requests
 
-      - name: Download Edge Driver
+      - name: Install Chromium
         run: |
-          wget https://msedgedriver.azureedge.net/120.0.2210.133/edgedriver_linux64.zip
-          unzip edgedriver_linux64.zip
-          chmod +x msedgedriver
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+
+      - name: Download Chrome Driver
+        run: |
+           wget https://chromedriver.storage.googleapis.com/120.0.6099.71/chromedriver_linux64.zip
+           unzip chromedriver_linux64.zip
+           chmod +x chromedriver
 
       - name: Run script
         env:
