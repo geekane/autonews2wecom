@@ -2,7 +2,7 @@ name: Fetch and Send Hot News
 
 on:
   schedule:
-    - cron: '34 8 * * *'  # 每天 UTC 时间 0 点运行
+    - cron: '43 8 * * *'
 
 jobs:
   fetch-and-send:
