@@ -26,10 +26,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y chromium-browser
-          
+
       - name: Run script
         env:
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
+          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}  # 添加 SILICONFLOW_API_KEY
         run: |
           set -x
           /opt/hostedtoolcache/Python/3.12.8/x64/bin/python news.py --driver_path chromedriver
