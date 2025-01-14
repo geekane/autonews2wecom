@@ -86,22 +86,46 @@ def send_to_wechat_bot(content):
         print(f"发送消息到企业微信机器人失败: {e}")
         return False
 
-def is_hardware_related(title, api_key):
+def is_hardware_related(titles, api_key):
     """
     使用大语言模型判断新闻标题是否与电脑硬件及游戏相关，只返回相关内容。
+    接收一个新闻标题列表，并返回过滤后的列表
     """
     url = "https://api.siliconflow.cn/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
+    
+    # 构建 AI Prompt，包括所有的输入和输出示例
+    example_prompt = """请分析以下新闻标题列表，提取出与电脑硬件（例如 CPU、GPU、主板、内存、硬盘、显示器等）和电子游戏（包括游戏发布、游戏更新、游戏硬件评测等）直接相关的新闻标题。如果新闻标题与这两个主题无关，请不要输出任何内容。请只返回相关新闻的标题，并且每行一个标题。
+
+例如：
+输入：
+终结命名混乱，USB 全新徽标直接标注传输速度、功率瓦数
+华为余承东 2025 全员信：鸿蒙三分天下有其一，10 万个原生应用是未来半年到一年关键目标
+王守义十三香给 1000 多名员工发华为 Mate 60：迎来 40 周年厂庆
+华为余承东晒自购享界 S9：感觉非常棒，百公里电耗 11.4kWh
+彻底脱去伪装，鸿蒙智行问界 M8 大量实车谍照曝光
+雷军亲赴黑河冬测：不只有“泼水成冰”，还验收小米 SU7 Ultra / YU7 成果
+尾号 0000000 的手机号拍卖：70 万成交，只有使用权没有所有权
+26.35 万元起，特斯拉焕新 Model Y 冰河蓝实车曝光
+冯骥回应《黑神话：悟空》更新 Steam 上线最晚：先在人少平台灰度测试
+泰国推出旅游警察 App：可发送定位、报警
+三只羊旗下“小杨甄选”转战微信视频号平台复播
+零跑汽车成第二家盈利新势力，提前一年达成目标
+输出：
+终结命名混乱，USB 全新徽标直接标注传输速度、功率瓦数
+冯骥回应《黑神话：悟空》更新 Steam 上线最晚：先在人少平台灰度测试
+
+现在请分析以下新闻标题列表:\n""" + "\n".join(titles)
+
     payload = {
         "model": "Qwen/Qwen2.5-7B-Instruct",
-         "messages": [
+        "messages": [
             {
                 "role": "user",
-                 "content": f"请分析以下新闻标题，提取出与电脑硬件（例如 CPU、GPU、主板、内存、硬盘、显示器等）和电子游戏（包括游戏发布、游戏更新、游戏硬件评测等）直接相关的新闻标题。如果新闻标题与这两个主题无关，请不要输出任何内容。请只返回相关新闻的标题，不要包含任何其他解释或说明。 \n\n新闻标题：{title}"
-
+                "content": example_prompt
             }
         ],
         "stream": False,
@@ -115,11 +139,13 @@ def is_hardware_related(title, api_key):
         data = response.json()
         if data and data.get("choices") and data["choices"][0].get("message"):
             content = data["choices"][0]["message"].get("content", "").strip()
-            return content if content else None
-        return None
+            # 将 AI 返回的文本按行拆分，并去除空行，生成结果列表
+            filtered_titles = [line for line in content.splitlines() if line]
+            return filtered_titles
+        return []
     except requests.exceptions.RequestException as e:
         print(f"AI 过滤请求失败: {e}")
-        return None
+        return []
 
 
 if __name__ == "__main__":
@@ -138,11 +164,15 @@ if __name__ == "__main__":
             if not api_key:
                 print("请设置环境变量 'SILICONFLOW_API_KEY'")
                 exit()
+            
+            titles = [item['title'] for item in news_list]
+            filtered_titles = is_hardware_related(titles,api_key)
+
             hardware_news = []
             for item in news_list:
-                 ai_response = is_hardware_related(item['title'], api_key)
-                 if ai_response:
-                     hardware_news.append({'title': ai_response, 'link': item['link']})
+                if item['title'] in filtered_titles:
+                      hardware_news.append(item)
+
             if hardware_news:
                 content = "今日电脑硬件及游戏热点:\n"
                 for item in hardware_news:
