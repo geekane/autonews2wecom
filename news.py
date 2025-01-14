@@ -154,38 +154,43 @@ if __name__ == "__main__":
     parser.add_argument("--chromium_path", help="Path to chrome")
     args = parser.parse_args()
 
-    url = 'https://rebang.today/tech?tab=ithome'
-    html = fetch_hot_news(url, driver_path=args.driver_path, chromium_path = args.chromium_path)
-    if html:
-        news_list = parse_html(html)
-        if news_list:
-            # 过滤硬件相关新闻
-            api_key = os.getenv("SILICONFLOW_API_KEY")
-            if not api_key:
-                print("请设置环境变量 'SILICONFLOW_API_KEY'")
-                exit()
-            
-            titles = [item['title'] for item in news_list]
-            filtered_titles = is_hardware_related(titles,api_key)
+    urls = [
+        'https://rebang.today/tech?tab=ifanr',
+        'https://rebang.today/tech?tab=landian',
+        'https://rebang.today/tech?tab=36kr'
+    ]
+    
+    all_hardware_news = []
 
-            hardware_news = []
-            for item in news_list:
-                if item['title'] in filtered_titles:
-                      hardware_news.append(item)
+    api_key = os.getenv("SILICONFLOW_API_KEY")
+    if not api_key:
+        print("请设置环境变量 'SILICONFLOW_API_KEY'")
+        exit()
 
-            if hardware_news:
-                content = "今日电脑硬件及游戏热点:\n"
-                for item in hardware_news:
-                    content += f"- {item['title']}: {item['link']}\n"
-                # 发送企业微信
-                success = send_to_wechat_bot(content)
-                if success:
-                    print("消息发送成功")
-                else:
-                    print("消息发送失败")
-            else:
-                print("没有找到相关的电脑硬件及游戏新闻")
+    for url in urls:
+        html = fetch_hot_news(url, driver_path=args.driver_path, chromium_path = args.chromium_path)
+        if html:
+            news_list = parse_html(html)
+            if news_list:
+                titles = [item['title'] for item in news_list]
+                filtered_titles = is_hardware_related(titles, api_key)
+                
+                hardware_news = []
+                for item in news_list:
+                    if item['title'] in filtered_titles:
+                         hardware_news.append(item)
+                all_hardware_news.extend(hardware_news)
         else:
-            print('没有找到热点信息')
+             print(f"获取 {url} 页面信息失败")
+    if all_hardware_news:
+        content = "今日电脑硬件及游戏热点:\n"
+        for item in all_hardware_news:
+            content += f"- {item['title']}: {item['link']}\n"
+         # 发送企业微信
+        success = send_to_wechat_bot(content)
+        if success:
+            print("消息发送成功")
+        else:
+           print("消息发送失败")
     else:
-        print('获取页面信息失败')
+        print("没有找到相关的电脑硬件及游戏新闻")
