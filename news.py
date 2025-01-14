@@ -100,66 +100,27 @@ def is_hardware_related(title, api_key):
          "messages": [
             {
                 "role": "user",
-                "content": f"根据以下信息：{title}。提取出和电脑硬件以及游戏相关的新闻，其他不用给"
-                """
-    使用大语言模型判断新闻标题是否与电脑硬件及游戏相关，只返回相关内容。
+                 "content": f"请分析以下新闻标题，提取出与电脑硬件（例如 CPU、GPU、主板、内存、硬盘、显示器等）和电子游戏（包括游戏发布、游戏更新、游戏硬件评测等）直接相关的新闻标题。如果新闻标题与这两个主题无关，请不要输出任何内容。请只返回相关新闻的标题，不要包含任何其他解释或说明。 \n\n新闻标题：{title}"
 
-    参数:
-    title (str): 新闻标题
-    api_key (str): API 密钥
-
-    返回:
-    str: 如果新闻标题与电脑硬件及游戏相关，返回相关内容；否则返回 None
-    """
-    url = "https://api.siliconflow.cn/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "Qwen/Qwen2.5-7B-Instruct",
-        "messages": [
-            {
-                "role": "user",
-                "content": f"请分析以下新闻标题：{title}，提取出与电脑硬件（例如 CPU、GPU、主板、内存、硬盘、显示器等）和电子游戏（包括游戏发布、游戏更新、游戏硬件评测等）直接相关的新闻标题。如果新闻标题与这两个主题无关，请不要输出任何内容。请只返回相关新闻的标题，不要包含任何其他解释或说明。"
             }
         ],
         "stream": False,
         "max_tokens": 512,
         "temperature": 0.1,
     }
+
     try:
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
         data = response.json()
         if data and data.get("choices") and data["choices"][0].get("message"):
             content = data["choices"][0]["message"].get("content", "").strip()
-            # 判断content是否为空，如果为空则表示不相关
             return content if content else None
         return None
     except requests.exceptions.RequestException as e:
         print(f"AI 过滤请求失败: {e}")
         return None
-        
-            }
-        ],
-        "stream": False,
-        "max_tokens": 512,
-        "temperature": 0.1,
-    }
 
-    try:
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        if data and data.get("choices") and data["choices"][0].get("message"):
-            content = data["choices"][0]["message"].get("content", "").strip()
-            # 判断content是否为空，如果为空则表示不相关
-            return content if content else None 
-        return None # 如果请求失败或者没有返回content，则返回None
-    except requests.exceptions.RequestException as e:
-        print(f"AI 过滤请求失败: {e}")
-        return None
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -172,7 +133,7 @@ if __name__ == "__main__":
     if html:
         news_list = parse_html(html)
         if news_list:
-             # 过滤硬件相关新闻
+            # 过滤硬件相关新闻
             api_key = os.getenv("SILICONFLOW_API_KEY")
             if not api_key:
                 print("请设置环境变量 'SILICONFLOW_API_KEY'")
