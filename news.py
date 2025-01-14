@@ -101,6 +101,47 @@ def send_to_wechat_bot(content):
         print(f"发送消息到企业微信机器人失败: {e}")
         return False
 
+def is_hardware_related(title, api_key):
+    """
+    使用大语言模型判断新闻标题是否与电脑硬件相关。
+
+    Args:
+        title (str): 新闻标题
+        api_key (str): SiliconFlow API Key
+
+    Returns:
+        bool: True 如果相关，否则 False
+    """
+    url = "https://api.siliconflow.cn/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "Qwen/QVQ-72B-Preview",
+         "messages": [
+            {
+                "role": "user",
+                "content": f"请判断以下新闻标题是否与电脑硬件相关：{title}。请直接回复'是'或'否'"
+            }
+        ],
+        "stream": False,
+        "max_tokens": 10,
+        "temperature": 0.1,
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status() # 检查请求是否成功
+        data = response.json()
+        if data and data.get("choices") and data["choices"][0].get("message"):
+            content = data["choices"][0]["message"].get("content", "").strip()
+            return "是" in content
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"AI 过滤请求失败: {e}")
+        return False
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -114,16 +155,26 @@ if __name__ == "__main__":
     if html:
         news_list = parse_html(html)
         if news_list:
-            # 格式化成文本
-            content = "今日热点:\n"
-            for item in news_list:
-                content += f"- {item['title']}\n"
-            # 发送企业微信
-            success = send_to_wechat_bot(content)
-            if success:
-                print("消息发送成功")
+            # 过滤硬件相关新闻
+            api_key = os.getenv("SILICONFLOW_API_KEY")
+            if not api_key:
+                print("请设置环境变量 'SILICONFLOW_API_KEY'")
+                exit()
+            hardware_news = [
+                item for item in news_list if is_hardware_related(item['title'], api_key)
+            ]
+            if hardware_news:
+                content = "今日电脑硬件热点:\n"
+                for item in hardware_news:
+                    content += f"- {item['title']}: {item['link']}\n"
+                # 发送企业微信
+                success = send_to_wechat_bot(content)
+                if success:
+                    print("消息发送成功")
+                else:
+                    print("消息发送失败")
             else:
-                print("消息发送失败")
+                print("没有找到相关的电脑硬件新闻")
         else:
             print('没有找到热点信息')
     else:
