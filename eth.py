@@ -134,7 +134,7 @@ def send_wechat_message(access_token, message):
         "url": "https://weixin.qq.com",
         "data": {
             "ETH": {  # 修改为 ETH
-                "value": message # 将所有日志内容放在这里
+                "value": message  # 将所有日志内容放在这里
             },
         }
     }
@@ -158,15 +158,15 @@ def eth_report():
     access_token = get_access_token()
     print(f"eth_report access_token: {access_token}")
     # 2. 获取以太坊价格
-    url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%81/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
+    url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%1F/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
     eth_price = fetch_eth_price(url)
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
     if eth_price:
-      eth_price = "当前价格为: " + eth_price + " .DATA" # 组合消息, 添加 .DATA
-      send_wechat_message(access_token, eth_price)  # 发送 ETH 价格
+      #eth_price = "当前价格为: " + eth_price # 组合消息, 
+      send_wechat_message(access_token, f"当前价格为: {eth_price}")  # 发送 ETH 价格
     else:
-      send_wechat_message(access_token, "运行失败，未能获取以太坊价格.DATA")  # 发送默认消息
+      send_wechat_message(access_token, "运行失败，未能获取以太坊价格")  # 发送默认消息
     print("eth_report 函数结束")
 
 if __name__ == "__main__":
