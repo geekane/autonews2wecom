@@ -1,6 +1,7 @@
 import argparse
 import os
 import uuid
+import platform
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options
@@ -8,12 +9,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
-# ... 其他代码 ...
 
 def fetch_eth_price(url, driver_path=None, chromium_path=None):
-    """
-    使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格.
-    """
+    print("fetch_eth_price 函数开始")  # 添加
     try:
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
@@ -50,11 +48,25 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
             )
         except Exception as e:
             print(f"等待价格元素加载失败: {e}")
-            driver.quit()
+            try:
+                driver.save_screenshot("error.png") # 尝试截图
+            except:
+                pass
+            try:
+                print(driver.page_source) # 尝试打印页面源代码
+            except:
+                pass
+            try:
+                driver.quit()
+            except:
+                pass
             return None
 
         html = driver.page_source
-        driver.quit()
+        try:
+            driver.quit()
+        except:
+            pass
 
         soup = BeautifulSoup(html, 'html.parser')
         price_element = soup.find('div', attrs={'data-controller': 'coin-show', 'class': lambda x: x and 'tw-relative' in x})
@@ -74,14 +86,29 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
         else:
             print("获取价格失败")
             return None
+        print("成功获取以太坊价格")  # 添加
         return price
     except Exception as e:
         print(f"获取页面信息失败: {e}")
         if 'driver' in locals():
-            driver.quit()
+            try:
+                driver.quit()
+            except:
+                pass
         return None
     finally:
+        print("fetch_eth_price 函数结束")  # 添加
         try:
             driver.quit() # 确保 driver 关闭
         except:
             pass
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--driver_path", help="Path to chromedriver", default="chromedriver") # 添加 default
+    parser.add_argument("--chromium_path", help="Path to chrome")
+    args = parser.parse_args()
+
+    url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%81/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
+
+    eth_price = fetch_eth_price(url, driver_path=args.driver_path, chromium_path=args.chromium_path)
