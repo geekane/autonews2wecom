@@ -9,6 +9,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+import logging
+
+# 配置日志
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # 从环境变量中获取测试号信息
 appID = os.getenv("APPID")
@@ -21,7 +25,21 @@ if not appID or not appSecret or not openId or not eth_template_id:
     exit()
 
 def fetch_eth_price(url, driver_path=None, chromium_path=None, wait_time=45):
-    print("fetch_eth_price 函数开始")
+    """
+    使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格。
+
+    Args:
+        url (str): 要抓取的 URL。
+        driver_path (str, optional): ChromeDriver 的路径。如果为 None，则使用当前目录下的 chromedriver。
+        chromium_path (str, optional): Chromium 浏览器的路径。
+        wait_time (int, optional): 等待页面元素加载的最长时间（秒）。
+
+    Returns:
+        str: 以太坊价格，如果获取失败则返回 None。
+    """
+    logging.info("fetch_eth_price 函数开始")  # 使用 logging 记录函数开始
+
+    driver = None  # 确保 driver 在 try 块之外声明
     try:
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
@@ -31,81 +49,98 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None, wait_time=45):
         if chromium_path:
             chrome_options.binary_location = chromium_path
 
-        if driver_path:
-            service = ChromeService(executable_path=driver_path)
-        else:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            driver_path = os.path.join(current_dir, 'chromedriver')
-            if not os.path.exists(driver_path):
-                print("chromedriver not found in current directory.")
-                return None
-            service = ChromeService(executable_path=driver_path)
-
-        print(f"Using chromedriver at: {driver_path}")
-        print(f"Python architecture: {platform.architecture()}")
-
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.get(url)
+        # 使用 try-except 处理 chromedriver 路径问题
         try:
+            if driver_path:
+                service = ChromeService(executable_path=driver_path)
+            else:
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                driver_path = os.path.join(current_dir, 'chromedriver')
+                if not os.path.exists(driver_path):
+                    raise FileNotFoundError(f"chromedriver not found at: {driver_path}") # 抛出异常，更好地处理错误
+                service = ChromeService(executable_path=driver_path)
+        except FileNotFoundError as e:
+            logging.error(e)
+            return None
+        except Exception as e:
+            logging.error(f"初始化 ChromeDriver 服务失败: {e}")
+            return None
+
+        logging.info(f"Using chromedriver at: {driver_path}")
+        logging.info(f"Python architecture: {platform.architecture()}")
+
+        driver = webdriver.Chrome(service=service, options=chrome_options) # 初始化 ChromeDriver
+        driver.get(url)
+
+        try:
+            # 使用更具体的 XPath，提高定位准确性
             element = WebDriverWait(driver, wait_time).until(
                 EC.presence_of_element_located(
-                    (By.XPATH, '//span[@data-converter-target="price" and @data-coin-id="279" and @data-price-target="price"]')
+                    (By.XPATH, '//span[@data-converter-target="price"][contains(@data-coin-id, "279")][@data-price-target="price"]')
                 )
             )
             if not element.is_displayed():
-                print("元素存在，但不可见")
-                print(f"CSS display 属性: {element.value_of_css_property('display')}")
-                print(f"CSS visibility 属性: {element.value_of_css_property('visibility')}")
+                logging.warning("元素存在，但不可见")
+                logging.warning(f"CSS display 属性: {element.value_of_css_property('display')}")
+                logging.warning(f"CSS visibility 属性: {element.value_of_css_property('visibility')}")
+
         except Exception as e:
-            print(f"等待价格元素加载失败: {e}")
+            logging.error(f"等待价格元素加载失败: {e}")
             try:
                 driver.save_screenshot("error.png")
-            except Exception:
-                pass
-            try:
-                driver.quit()
-            except Exception:
-                pass
+                logging.info("已保存错误截图到 error.png")
+            except Exception as screenshot_e:
+                logging.error(f"保存截图失败: {screenshot_e}")
             return None
 
         html = driver.page_source
-        try:
-            driver.quit()
-        except Exception:
-            pass
-
         soup = BeautifulSoup(html, 'html.parser')
-        price_span = soup.find('span', attrs={'data-converter-target': 'price', 'data-coin-id': '279', 'data-price-target': 'price'})
+
+        # 使用相同的 XPath 提取价格
+        price_span = soup.find('span', attrs={'data-converter-target': 'price', 'data-coin-id': '279', 'data-price-target': 'price'}) #soup.find('span', attrs={'data-converter-target': 'price'})
         if price_span:
             price = price_span.text.strip()
-            print(f"以太坊价格: {price}")
+            logging.info(f"以太坊价格: {price}")
             return price
         else:
-            print("获取价格失败: 未找到价格 span")
+            logging.warning("获取价格失败: 未找到价格 span")
             return None
 
     except Exception as e:
-        print(f"获取页面信息失败: {e}")
+        logging.error(f"获取页面信息失败: {e}")
         return None
+
     finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
-        print("fetch_eth_price 函数结束")
+        if driver: # 确保 driver 已经初始化
+            try:
+                driver.quit()
+            except Exception as e:
+                logging.error(f"关闭 ChromeDriver 失败: {e}")
+        logging.info("fetch_eth_price 函数结束") # 使用 logging 记录函数结束
 
 def get_access_token():
-    print("get_access_token 函数开始")
+    logging.info("get_access_token 函数开始")
     url = f'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={appID.strip()}&secret={appSecret.strip()}'
-    response = requests.get(url).json()
-    print(f"get_access_token 响应: {response}")
-    access_token = response.get('access_token')
-    print(f"access_token: {access_token}")
-    print("get_access_token 函数结束")
-    return access_token
+    try:
+        response = requests.get(url).json()
+        logging.info(f"get_access_token 响应: {response}")
+        access_token = response.get('access_token')
+        if not access_token:
+            logging.error(f"获取 access_token 失败: {response}")
+            return None
+        logging.info(f"access_token: {access_token}")
+        return access_token
+    except requests.exceptions.RequestException as e:
+        logging.error(f"获取 access_token 失败: 网络请求错误: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        logging.error(f"解析 JSON 响应失败: {e}")
+        return None
+    finally:
+        logging.info("get_access_token 函数结束")
 
 def send_wechat_message(access_token, message):
-    print("send_wechat_message 函数开始")
+    logging.info("send_wechat_message 函数开始")
     body = {
         "touser": openId.strip(),
         "template_id": eth_template_id.strip(),
@@ -114,35 +149,45 @@ def send_wechat_message(access_token, message):
             "ETH": {"value": message}
         }
     }
-    print(f"send_wechat_message body: {body}")
+    logging.info(f"send_wechat_message body: {body}")
     url = f'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}'
     try:
         response = requests.post(url, json=body)
-        print(f"send_wechat_message 响应: {response.text}")
-        response.raise_for_status()
+        logging.info(f"send_wechat_message 响应: {response.text}")
+        response.raise_for_status()  # 检查响应状态码
+    except requests.exceptions.RequestException as e:
+        logging.error(f"发送消息到微信失败: 网络请求错误: {e}")
+        logging.error(f"send_wechat_message 失败 body: {body}")
     except Exception as e:
-        print(f"发送消息到微信失败: {e}")
-        print(f"send_wechat_message 失败 body: {body}")
-    print("send_wechat_message 函数结束")
+        logging.error(f"发送消息到微信失败: {e}")
+        logging.error(f"send_wechat_message 失败 body: {body}")
+    finally:
+        logging.info("send_wechat_message 函数结束")
 
 def eth_report():
-    print("eth_report 函数开始")
+    logging.info("eth_report 函数开始")
     access_token = get_access_token()
-    print(f"eth_report access_token: {access_token}")
-    url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%BD/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
+    if not access_token:
+        logging.error("无法获取 access_token，停止发送消息")
+        return
+
+    logging.info(f"eth_report access_token: {access_token}")
+    url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%81/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
     eth_price = fetch_eth_price(url)
-    print(f"eth_report eth_price: {eth_price}")
+    logging.info(f"eth_report eth_price: {eth_price}")
+
     if eth_price:
         send_wechat_message(access_token, f"当前价格为: {eth_price}")
     else:
         send_wechat_message(access_token, "运行失败，未能获取以太坊价格")
-    print("eth_report 函数结束")
+
+    logging.info("eth_report 函数结束")
 
 if __name__ == "__main__":
-    print("__main__ 开始")
+    logging.info("__main__ 开始")
     parser = argparse.ArgumentParser()
     parser.add_argument("--driver_path", help="Path to chromedriver")
     parser.add_argument("--chromium_path", help="Path to chrome")
     args = parser.parse_args()
     eth_report()
-    print("__main__ 结束")
+    logging.info("__main__ 结束")
