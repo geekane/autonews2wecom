@@ -37,7 +37,16 @@ jobs:
         run: |
           df -h /tmp
 
+      - name: List directory contents
+        run: |
+          ls -l
+
+      - name: Find working directory
+        id: get-working-directory
+        run: |
+          echo "WORKING_DIRECTORY=$(pwd)" >> $GITHUB_OUTPUT
+
       - name: Run script
         run: |
           set -x
-          python eth.py --driver_path chromedriver
+          python ${{ steps.get-working-directory.outputs.WORKING_DIRECTORY }}/eth.py --driver_path chromedriver
