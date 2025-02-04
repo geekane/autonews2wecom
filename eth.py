@@ -134,14 +134,14 @@ def send_wechat_message(access_token, message):
         "url": "https://weixin.qq.com",
         "data": {
             "ETH": {  # 修改为 ETH
-                "value": message  # 将所有日志内容放在这里
+                "value": message # 将所有日志内容放在这里
             },
         }
     }
     print(f"send_wechat_message body: {body}")
     url = 'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={}'.format(access_token)
     try:
-        response = requests.post(url, json=json.dumps(body)) # 移除 encode 和 decode
+        response = requests.post(url, json=json.dumps(body, ensure_ascii=False))
         print(f"send_wechat_message 响应: {response.text}")
         response.raise_for_status()
     except Exception as e:
@@ -163,11 +163,10 @@ def eth_report():
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
     if eth_price:
-      eth_price = eth_price.replace("US$", "").replace(",", "")  # 移除 $ 和 ,
-      message = "当前价格为: " + eth_price # 组合消息
-      send_wechat_message(access_token, message)  # 发送 ETH 价格
+      eth_price = "当前价格为: " + eth_price + " .DATA" # 组合消息, 添加 .DATA
+      send_wechat_message(access_token, eth_price)  # 发送 ETH 价格
     else:
-      send_wechat_message(access_token, "运行失败，未能获取以太坊价格")  # 发送默认消息
+      send_wechat_message(access_token, "运行失败，未能获取以太坊价格.DATA")  # 发送默认消息
     print("eth_report 函数结束")
 
 if __name__ == "__main__":
