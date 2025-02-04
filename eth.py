@@ -24,7 +24,7 @@ if not appID or not appSecret or not openId or not eth_template_id:
     print("缺少环境变量：请检查 APPID, APPSECRET, OPENID 和 ETH_TEMPLATE_ID 是否已正确设置")
     exit()
 
-def fetch_eth_price(url, driver_path=None, chromium_path=None, wait_time=45):
+def fetch_eth_price(url, driver_path=None, chromium_path=None, wait_time=60):
     """
     使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格。
 
