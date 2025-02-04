@@ -31,4 +31,4 @@ jobs:
       - name: Run script
         run: |
           set -x
-          python eth.py
+          python eth.py --driver_path chromedriver
