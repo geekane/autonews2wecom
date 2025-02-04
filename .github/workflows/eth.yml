@@ -8,8 +8,6 @@ on:
 jobs:
   fetch-and-send:
     runs-on: ubuntu-latest
-    container:
-      image: browserless/chrome:113-puppeteer
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -24,6 +22,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium beautifulsoup4 requests html5lib
 
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+          sudo apt-get install -y chromium-chromedriver
+
       - name: Run script
         env:
           APPID: ${{ secrets.APPID }}  # 从 secrets 获取
@@ -32,4 +36,4 @@ jobs:
           ETH_TEMPLATE_ID: ${{ secrets.ETH_TEMPLATE_ID }}  # 从 secrets 获取
         run: |
           set -x
-          python eth.py
+          python eth.py --driver_path chromedriver
