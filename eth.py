@@ -28,6 +28,7 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
     """
     使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格.
     """
+    print("fetch_eth_price 函数开始")
     try:
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
@@ -105,6 +106,7 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
             driver.quit()
         except:
             pass
+        print("fetch_eth_price 函数结束")
 
 def get_access_token():
     print("get_access_token 函数开始")
@@ -114,6 +116,8 @@ def get_access_token():
     response = requests.get(url).json()
     print(f"get_access_token 响应: {response}")
     access_token = response.get('access_token')
+    print(f"access_token: {access_token}")
+    print("get_access_token 函数结束")
     return access_token
 
 
@@ -136,8 +140,12 @@ def send_wechat_message(access_token, message):
     }
     print(f"send_wechat_message body: {body}")
     url = 'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={}'.format(access_token)
-    response = requests.post(url, json=json.dumps(body))
-    print(f"send_wechat_message 响应: {response.text}")
+    try:
+        response = requests.post(url, json=json.dumps(body))
+        print(f"send_wechat_message 响应: {response.text}")
+        response.raise_for_status()
+    except Exception as e:
+        print(f"发送消息到企业微信机器人失败: {e}")
     print("send_wechat_message 函数结束")
 
 
@@ -152,13 +160,15 @@ def eth_report():
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
     if eth_price:
+      eth_price = "当前价格为" + eth_price
       send_wechat_message(access_token, eth_price)  # 发送 ETH 价格
     else:
-      send_wechat_message(access_token, "未能获取以太坊价格")  # 发送默认消息
+      send_wechat_message(access_token, "运行失败，未能获取以太坊价格")  # 发送默认消息
     print("eth_report 函数结束")
 
 if __name__ == "__main__":
     print("__main__ 开始")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--driver_path", help="Path to chromedriver")
     parser.add_argument("--chromium_path", help="Path to chrome")
