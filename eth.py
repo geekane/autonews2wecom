@@ -127,7 +127,7 @@ def send_wechat_message(access_token, message):
         "url": "https://weixin.qq.com",
         "data": {
             "ETH": {
-                "value": message
+                "value": "test"
             },
         }
     }
@@ -154,7 +154,7 @@ def eth_report():
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
     if eth_price:
-        send_wechat_message(access_token, f"当前价格为: {eth_price}")
+        send_wechat_message(access_token, f"{eth_price}")
     else:
         send_wechat_message(access_token, "运行失败，未能获取以太坊价格")
     print("eth_report 函数结束")
