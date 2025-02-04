@@ -30,7 +30,11 @@ jobs:
 
       - name: Rename chromedriver
         run: |
-          mv chromedriver chromedriver.exe # 将 chromedriver 重命名为 chromedriver.exe
+          mv chromedriver chromedriver.exe
+
+      - name: Make chromedriver executable
+        run: |
+          chmod +x chromedriver.exe
 
       - name: Run script
         env:
@@ -40,4 +44,4 @@ jobs:
           ETH_TEMPLATE_ID: ${{ secrets.ETH_TEMPLATE_ID }}  # 从 secrets 获取
         run: |
           set -x
-          python eth.py --driver_path chromedriver.exe
+          python eth.py --driver_path chromedriver
