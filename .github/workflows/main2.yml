@@ -33,6 +33,10 @@ jobs:
           pkill chrome || true
           pkill chromedriver || true
 
+      - name: Check /tmp directory space
+        run: |
+          df -h /tmp
+
       - name: Run script
         run: |
           set -x
