@@ -30,6 +30,7 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
     """
     使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格.
     """
+    print("fetch_eth_price 函数开始")
     try:
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
@@ -135,7 +136,7 @@ def send_wechat_message(access_token, message):
         "template_id": eth_template_id.strip(),
         "url": "https://weixin.qq.com",
         "data": {
-            "ETH": {
+            "ETH": {  # 修改为 ETH
                 "value": message  # 将所有日志内容放在这里
             },
         }
