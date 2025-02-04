@@ -1,19 +1,19 @@
-name: Fetch 和 Send Hot News
+name: ETH价格追踪
 
 on:
   schedule:
-    - cron: '0 */8 * * *'  # 每隔 10 分钟运行
-  workflow_dispatch: # 添加 workflow_dispatch 事件
+    - cron: '*/5 * * * *'  # 每 5 分钟运行
+  workflow_dispatch: # 添加 workflow_dispatch 事件，允许手动触发
 
 jobs:
   fetch-and-send:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
@@ -26,11 +26,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y chromium-browser
+          sudo apt-get install -y chromium-chromedriver
 
       - name: Run script
-        env:
-          WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
-          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
         run: |
           set -x
-          /opt/hostedtoolcache/Python/3.12.8/x64/bin/python news.py --driver_path chromedriver
+          python eth.py
