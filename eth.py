@@ -21,7 +21,7 @@ if not appID or not appSecret or not openId or not eth_template_id:
     print("缺少环境变量：请检查 APPID, APPSECRET, OPENID 和 ETH_TEMPLATE_ID 是否已正确设置")
     exit()
 
-def fetch_eth_price(url, driver_path=None, chromium_path=None):
+def fetch_eth_price(url, driver_path=None, chromium_path=None, wait_time=45):
     """
     使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格。
     """
@@ -51,13 +51,12 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get(url)
         try:
-            # 等待价格元素出现（等待时间延长至90秒）
-            element = WebDriverWait(driver, 90).until(
+            # 等待价格元素出现，等待时间可以通过 wait_time 参数进行调整
+            element = WebDriverWait(driver, wait_time).until(
                 EC.presence_of_element_located(
                     (By.XPATH, '//span[@data-converter-target="price" and @data-coin-id="279" and @data-price-target="price"]')
                 )
             )
-
             if not element.is_displayed():
                 print("元素存在，但不可见")
                 print(f"CSS display 属性: {element.value_of_css_property('display')}")
@@ -68,10 +67,11 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
                 driver.save_screenshot("error.png")  # 尝试截图
             except Exception:
                 pass
-            try:
-                print(driver.page_source)  # 尝试打印页面源代码
-            except Exception:
-                pass
+            # 注释掉打印整个页面源代码，防止日志输出过多内容
+            # try:
+            #     print(driver.page_source)
+            # except Exception:
+            #     pass
             try:
                 driver.quit()
             except Exception:
@@ -127,7 +127,7 @@ def send_wechat_message(access_token, message):
         "url": "https://weixin.qq.com",
         "data": {
             "ETH": {
-                "value": "test"
+                "value": message
             },
         }
     }
@@ -148,13 +148,13 @@ def eth_report():
     # 1. 获取 access_token
     access_token = get_access_token()
     print(f"eth_report access_token: {access_token}")
-    # 2. 获取以太坊价格，修正 URL 编码（确保页面实际存在且包含目标元素）
+    # 2. 获取以太坊价格，使用修正后的 URL
     url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%BD/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
     eth_price = fetch_eth_price(url)
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
     if eth_price:
-        send_wechat_message(access_token, f"{eth_price}")
+        send_wechat_message(access_token, f"当前价格为: {eth_price}")
     else:
         send_wechat_message(access_token, "运行失败，未能获取以太坊价格")
     print("eth_report 函数结束")
