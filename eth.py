@@ -1,6 +1,5 @@
 import argparse
 import os
-import uuid
 import platform
 import requests
 import json
@@ -12,13 +11,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 
-# 从测试号信息获取
-appID = os.getenv("APPID")  # 从环境变量中获取
-appSecret = os.getenv("APPSECRET")  # 从环境变量中获取
-# 收信人ID即 用户列表中的微信号，见上文
-openId = os.getenv("OPENID")  # 从环境变量中获取
-# ETH模板ID
-eth_template_id = os.getenv("ETH_TEMPLATE_ID")  # 从环境变量中获取
+# 从环境变量中获取测试号信息
+appID = os.getenv("APPID")
+appSecret = os.getenv("APPSECRET")
+openId = os.getenv("OPENID")
+eth_template_id = os.getenv("ETH_TEMPLATE_ID")
 
 if not appID or not appSecret or not openId or not eth_template_id:
     print("缺少环境变量：请检查 APPID, APPSECRET, OPENID 和 ETH_TEMPLATE_ID 是否已正确设置")
@@ -26,14 +23,14 @@ if not appID or not appSecret or not openId or not eth_template_id:
 
 def fetch_eth_price(url, driver_path=None, chromium_path=None):
     """
-    使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格.
+    使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格。
     """
     print("fetch_eth_price 函数开始")
     try:
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--headless")  # 添加 headless 模式
+        chrome_options.add_argument("--headless")  # 启用 headless 模式
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         if chromium_path:
             chrome_options.binary_location = chromium_path
@@ -48,46 +45,47 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
                 return None
             service = ChromeService(executable_path=driver_path)
 
-        print(f"Using chromedriver at: {driver_path}")  # 打印正在使用的chromedriver路径
-        print(f"Python architecture: {platform.architecture()}")  # 打印Python架构
+        print(f"Using chromedriver at: {driver_path}")
+        print(f"Python architecture: {platform.architecture()}")
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get(url)
         try:
-            # 等待价格元素出现
-            element = WebDriverWait(driver, 60).until(
-                EC.presence_of_element_located((By.XPATH, '//span[@data-converter-target="price" and @data-coin-id="279" and @data-price-target="price"]'))
+            # 等待价格元素出现（等待时间延长至90秒）
+            element = WebDriverWait(driver, 90).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, '//span[@data-converter-target="price" and @data-coin-id="279" and @data-price-target="price"]')
+                )
             )
 
             if not element.is_displayed():
                 print("元素存在，但不可见")
                 print(f"CSS display 属性: {element.value_of_css_property('display')}")
                 print(f"CSS visibility 属性: {element.value_of_css_property('visibility')}")
-
         except Exception as e:
             print(f"等待价格元素加载失败: {e}")
             try:
                 driver.save_screenshot("error.png")  # 尝试截图
-            except:
+            except Exception:
                 pass
             try:
                 print(driver.page_source)  # 尝试打印页面源代码
-            except:
+            except Exception:
                 pass
             try:
                 driver.quit()
-            except:
+            except Exception:
                 pass
             return None
 
         html = driver.page_source
         try:
             driver.quit()
-        except:
+        except Exception:
             pass
-        
+
         soup = BeautifulSoup(html, 'html.parser')
-        # 使用更精确的选择器直接找到价格 span
+        # 通过更精确的选择器直接找到价格 span
         price_span = soup.find('span', attrs={'data-converter-target': 'price', 'data-coin-id': '279', 'data-price-target': 'price'})
 
         if price_span:
@@ -104,15 +102,16 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
     finally:
         try:
             driver.quit()
-        except:
+        except Exception:
             pass
         print("fetch_eth_price 函数结束")
 
 def get_access_token():
     print("get_access_token 函数开始")
-    # 获取access token的url
-    url = 'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={}&secret={}' \
-        .format(appID.strip(), appSecret.strip())
+    # 获取 access token 的 URL
+    url = 'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={}&secret={}'.format(
+        appID.strip(), appSecret.strip()
+    )
     response = requests.get(url).json()
     print(f"get_access_token 响应: {response}")
     access_token = response.get('access_token')
@@ -122,54 +121,46 @@ def get_access_token():
 
 def send_wechat_message(access_token, message):
     print("send_wechat_message 函数开始")
-    # touser 就是 openID
-    # template_id 就是模板ID
-    # url 就是点击模板跳转的url
-    # data就按这种格式写，time和text就是之前{{time.DATA}}中的那个time，value就是你要替换DATA的值
-
     body = {
         "touser": openId.strip(),
         "template_id": eth_template_id.strip(),
         "url": "https://weixin.qq.com",
         "data": {
-            "ETH": {  # 修改为 ETH
-                "value": message  # 将所有日志内容放在这里
+            "ETH": {
+                "value": message
             },
         }
     }
     print(f"send_wechat_message body: {body}")
     url = 'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={}'.format(access_token)
     try:
-        # 直接传入字典，requests会自动进行json编码
+        # 直接传入字典，requests 会自动进行 JSON 编码
         response = requests.post(url, json=body)
         print(f"send_wechat_message 响应: {response.text}")
         response.raise_for_status()
     except Exception as e:
-        print(f"发送消息到企业微信机器人失败: {e}")
-        # 查看body
-        print(f"send_wechat_message 失败body: {body}")
-
+        print(f"发送消息到微信失败: {e}")
+        print(f"send_wechat_message 失败 body: {body}")
     print("send_wechat_message 函数结束")
 
 def eth_report():
     print("eth_report 函数开始")
-    # 1. 获取access_token
+    # 1. 获取 access_token
     access_token = get_access_token()
     print(f"eth_report access_token: {access_token}")
-    # 2. 获取以太坊价格
-    url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%1F/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
+    # 2. 获取以太坊价格，修正 URL 编码（确保页面实际存在且包含目标元素）
+    url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%BD/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
     eth_price = fetch_eth_price(url)
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
     if eth_price:
-        send_wechat_message(access_token, f"当前价格为: {eth_price}")  # 发送 ETH 价格
+        send_wechat_message(access_token, f"当前价格为: {eth_price}")
     else:
-        send_wechat_message(access_token, "运行失败，未能获取以太坊价格")  # 发送默认消息
+        send_wechat_message(access_token, "运行失败，未能获取以太坊价格")
     print("eth_report 函数结束")
 
 if __name__ == "__main__":
     print("__main__ 开始")
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--driver_path", help="Path to chromedriver")
     parser.add_argument("--chromium_path", help="Path to chrome")
