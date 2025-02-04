@@ -24,7 +24,7 @@ if not appID or not appSecret or not openId or not eth_template_id:
     print("缺少环境变量：请检查 APPID, APPSECRET, OPENID 和 ETH_TEMPLATE_ID 是否已正确设置")
     exit()
 
-def fetch_eth_price(url, driver_path=无, chromium_path=无):
+def fetch_eth_price(url, driver_path=None, chromium_path=None):
     """
     使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格.
     """
@@ -42,10 +42,10 @@ def fetch_eth_price(url, driver_path=无, chromium_path=无):
             service = ChromeService(executable_path=driver_path)
         else:
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            driver_path = os.path.join(current_dir, 'chromedriver')
+            driver_path = os.path.join(current_dir, 'chromedriver')  # 修改为 chromedriver
             if not os.path.exists(driver_path):
-                print("chromedriver.exe not found in current directory.")
-                return 无
+                print("chromedriver not found in current directory.")
+                return None
             service = ChromeService(executable_path=driver_path)
 
         print(f"Using chromedriver at: {driver_path}") # 打印正在使用的chromedriver路径
@@ -56,7 +56,7 @@ def fetch_eth_price(url, driver_path=无, chromium_path=无):
         try:
             # 等待价格元素出现
             element = WebDriverWait(driver, 60).until(
-                EC.presence_of_element_located((By.XPATH, '//span[@data-converter-target="price" 和 @data-coin-id="279" 和 @data-price-target="price"]'))
+                EC.presence_of_element_located((By.XPATH, '//span[@data-converter-target="price" and @data-coin-id="279" and @data-price-target="price"]'))
             )
 
             if not element.is_displayed():
@@ -78,7 +78,7 @@ def fetch_eth_price(url, driver_path=无, chromium_path=无):
                 driver.quit()
             except:
                 pass
-            return 无
+            return None
 
         html = driver.page_source
         try:
@@ -97,7 +97,7 @@ def fetch_eth_price(url, driver_path=无, chromium_path=无):
             return price
         else:
             print("获取价格失败: 未找到价格 span")
-            return 无
+            return None
 
     except Exception as e:
         print(f"获取页面信息失败: {e}")
