@@ -12,8 +12,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
-import schedule
-
 
 # 从测试号信息获取
 appID = os.getenv("APPID")  # 从环境变量中获取
