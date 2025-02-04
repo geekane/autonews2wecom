@@ -177,7 +177,7 @@ def eth_report():
     logging.info(f"eth_report eth_price: {eth_price}")
 
     if eth_price:
-        send_wechat_message(access_token, f"当前价格为: {eth_price}")
+        send_wechat_message(access_token, f"{eth_price}")
     else:
         send_wechat_message(access_token, "运行失败，未能获取以太坊价格")
 
