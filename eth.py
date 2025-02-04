@@ -14,6 +14,12 @@ from bs4 import BeautifulSoup
 import io
 import sys
 
+# 定义全局变量
+program_log = io.StringIO(encoding="utf-8")  # 添加编码
+sys.stdout = program_log
+
+print("标准输出已重定向")  # 添加
+
 # 从测试号信息获取
 appID = os.getenv("APPID")  # 从环境变量中获取
 appSecret = os.getenv("APPSECRET")  # 从环境变量中获取
@@ -164,16 +170,17 @@ def eth_report():
 if __name__ == "__main__":
     print("__main__ 开始")
     # 捕获所有输出
-    program_log = io.StringIO()
+    program_log = io.StringIO(encoding="utf-8")  # 添加编码
     sys.stdout = program_log
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--driver_path", help="Path to chromedriver")
-    parser.add_argument("--chromium_path", help="Path to chrome")
-    args = parser.parse_args()
+    try:  # 添加 try...finally 块
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--driver_path", help="Path to chromedriver")
+        parser.add_argument("--chromium_path", help="Path to chrome")
+        args = parser.parse_args()
 
-    eth_report()
-
-    # 恢复标准输出
-    sys.stdout = sys.__stdout__
-    print("__main__ 结束")
+        eth_report()
+    finally:  # 确保恢复标准输出
+        # 恢复标准输出
+        sys.stdout = sys.__stdout__
+        print("__main__ 结束")
