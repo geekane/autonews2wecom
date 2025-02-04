@@ -2,8 +2,8 @@ name: ETH价格追踪
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
+    - cron: '*/5 * * * *'  # 每隔 5 分钟运行
+  workflow_dispatch: # 添加 workflow_dispatch 事件
 
 jobs:
   fetch-and-send:
@@ -28,16 +28,13 @@ jobs:
           sudo apt-get install -y chromium-browser
           sudo apt-get install -y chromium-chromedriver
 
-      - name: Make chromedriver executable
-        run: |
-          chmod +x chromedriver
-
       - name: Find Chromedriver Path
         id: chromedriver-path
         run: |
           CHROMEDRIVER_PATH=$(which chromedriver)
           echo "CHROMEDRIVER_PATH=$CHROMEDRIVER_PATH"
           echo "CHROMEDRIVER_PATH=$CHROMEDRIVER_PATH" >> $GITHUB_OUTPUT
+          echo "::set-output name=path::$CHROMEDRIVER_PATH" # New method to define output
 
       - name: Run script
         env:
@@ -47,4 +44,4 @@ jobs:
           ETH_TEMPLATE_ID: ${{ secrets.ETH_TEMPLATE_ID }}  # 从 secrets 获取
         run: |
           set -x
-          python eth.py --driver_path ${{ steps.chromedriver-path.outputs.CHROMEDRIVER_PATH }}
+          python eth.py --driver_path "${{ steps.chromedriver-path.outputs.path }}"
