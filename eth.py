@@ -33,10 +33,10 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--headless") # 添加 headless 模式
+        chrome_options.add_argument("--headless")  # 添加 headless 模式
         chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         if chromium_path:
-          chrome_options.binary_location = chromium_path
+            chrome_options.binary_location = chromium_path
 
         if driver_path:
             service = ChromeService(executable_path=driver_path)
@@ -48,8 +48,8 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
                 return None
             service = ChromeService(executable_path=driver_path)
 
-        print(f"Using chromedriver at: {driver_path}") # 打印正在使用的chromedriver路径
-        print(f"Python architecture: {platform.architecture()}") # 打印Python架构
+        print(f"Using chromedriver at: {driver_path}")  # 打印正在使用的chromedriver路径
+        print(f"Python architecture: {platform.architecture()}")  # 打印Python架构
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get(url)
@@ -67,11 +67,11 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
         except Exception as e:
             print(f"等待价格元素加载失败: {e}")
             try:
-                driver.save_screenshot("error.png") # 尝试截图
+                driver.save_screenshot("error.png")  # 尝试截图
             except:
                 pass
             try:
-                print(driver.page_source) # 尝试打印页面源代码
+                print(driver.page_source)  # 尝试打印页面源代码
             except:
                 pass
             try:
@@ -120,7 +120,6 @@ def get_access_token():
     print("get_access_token 函数结束")
     return access_token
 
-
 def send_wechat_message(access_token, message):
     print("send_wechat_message 函数开始")
     # touser 就是 openID
@@ -141,20 +140,20 @@ def send_wechat_message(access_token, message):
     print(f"send_wechat_message body: {body}")
     url = 'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={}'.format(access_token)
     try:
-        response = requests.post(url, json=json.dumps(body, ensure_ascii=False))
+        # 直接传入字典，requests会自动进行json编码
+        response = requests.post(url, json=body)
         print(f"send_wechat_message 响应: {response.text}")
         response.raise_for_status()
     except Exception as e:
         print(f"发送消息到企业微信机器人失败: {e}")
-        #查看body
+        # 查看body
         print(f"send_wechat_message 失败body: {body}")
 
     print("send_wechat_message 函数结束")
 
-
 def eth_report():
     print("eth_report 函数开始")
-    # 1.获取access_token
+    # 1. 获取access_token
     access_token = get_access_token()
     print(f"eth_report access_token: {access_token}")
     # 2. 获取以太坊价格
@@ -163,10 +162,9 @@ def eth_report():
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
     if eth_price:
-      #eth_price = "当前价格为: " + eth_price # 组合消息, 
-      send_wechat_message(access_token, f"当前价格为: {eth_price}")  # 发送 ETH 价格
+        send_wechat_message(access_token, f"当前价格为: {eth_price}")  # 发送 ETH 价格
     else:
-      send_wechat_message(access_token, "运行失败，未能获取以太坊价格")  # 发送默认消息
+        send_wechat_message(access_token, "运行失败，未能获取以太坊价格")  # 发送默认消息
     print("eth_report 函数结束")
 
 if __name__ == "__main__":
