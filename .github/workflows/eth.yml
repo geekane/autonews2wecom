@@ -2,8 +2,8 @@ name: ETH价格追踪
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # 每 30 分钟运行
-  workflow_dispatch: # 添加 workflow_dispatch 事件，允许手动触发
+    - cron: '*/5 * * * *'  # 每 5 分钟运行
+  workflow_dispatch:
 
 jobs:
   fetch-and-send:
@@ -15,12 +15,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.x'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install selenium beautifulsoup4 requests
+          pip install selenium beautifulsoup4 requests html5lib
 
       - name: Install Chromium
         run: |
@@ -28,25 +28,16 @@ jobs:
           sudo apt-get install -y chromium-browser
           sudo apt-get install -y chromium-chromedriver
 
-      - name: Kill Chrome processes
+      - name: Rename chromedriver
         run: |
-          pkill chrome || true
-          pkill chromedriver || true
-
-      - name: Check /tmp directory space
-        run: |
-          df -h /tmp
-
-      - name: List directory contents
-        run: |
-          ls -l
-
-      - name: Find working directory
-        id: get-working-directory
-        run: |
-          echo "WORKING_DIRECTORY=$(pwd)" >> $GITHUB_OUTPUT
+          mv chromedriver chromedriver.exe # 将 chromedriver 重命名为 chromedriver.exe
 
       - name: Run script
+        env:
+          APPID: ${{ secrets.APPID }}  # 从 secrets 获取
+          APPSECRET: ${{ secrets.APPSECRET }}  # 从 secrets 获取
+          OPENID: ${{ secrets.OPENID }}  # 从 secrets 获取
+          ETH_TEMPLATE_ID: ${{ secrets.ETH_TEMPLATE_ID }}  # 从 secrets 获取
         run: |
           set -x
-          python ${{ steps.get-working-directory.outputs.WORKING_DIRECTORY }}/eth.py --driver_path chromedriver
+          python eth.py --driver_path chromedriver.exe
