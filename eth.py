@@ -143,7 +143,7 @@ def send_wechat_message(access_token, message):
     }
     print(f"send_wechat_message body: {body}")
     url = 'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={}'.format(access_token)
-    response = requests.post(url, json.dumps(body.encode('utf-8').decode('unicode_escape')))
+    response = requests.post(url, json=json.dumps(body)) # 移除 encode 和 decode
     print(f"send_wechat_message 响应: {response.text}")
     print("send_wechat_message 函数结束")
 
