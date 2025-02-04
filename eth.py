@@ -20,11 +20,15 @@ openId = os.getenv("OPENID")  # 从环境变量中获取
 # ETH模板ID
 eth_template_id = os.getenv("ETH_TEMPLATE_ID")  # 从环境变量中获取
 
+if not appID or not appSecret or not openId or not eth_template_id:
+    print("缺少环境变量：请检查 APPID, APPSECRET, OPENID 和 ETH_TEMPLATE_ID 是否已正确设置")
+    exit()
+
 def fetch_eth_price(url, driver_path=None, chromium_path=None):
-    print("fetch_eth_price 函数开始")
     """
     使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格.
     """
+    print("fetch_eth_price 函数开始")
     try:
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
@@ -46,7 +50,6 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
 
         print(f"Using chromedriver at: {driver_path}") # 打印正在使用的chromedriver路径
         print(f"Python architecture: {platform.architecture()}") # 打印Python架构
-        print(f"ChromeOptions: {chrome_options.to_capabilities()}") # 打印 ChromeOptions
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get(url)
@@ -104,7 +107,7 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
             driver.quit()
         except:
             pass
-    print("fetch_eth_price 函数结束")
+        print("fetch_eth_price 函数结束")
 
 def get_access_token():
     print("get_access_token 函数开始")
@@ -155,7 +158,6 @@ def eth_report():
     # 3. 发送消息
     send_eth_price(access_token, eth_price)
     print("eth_report 函数结束")
-
 
 if __name__ == "__main__":
     print("__main__ 开始")
