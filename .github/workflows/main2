@@ -1,0 +1,36 @@
+name: Fetch and Send Hot News
+
+on:
+  schedule:
+    - cron: '0 */8 * * *'  # 每隔 10 分钟运行
+  workflow_dispatch: # 添加 workflow_dispatch 事件
+
+jobs:
+  fetch-and-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium beautifulsoup4 requests
+
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+
+      - name: Run script
+        env:
+          WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
+          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+        run: |
+          set -x
+          /opt/hostedtoolcache/Python/3.12.8/x64/bin/python news.py --driver_path chromedriver
