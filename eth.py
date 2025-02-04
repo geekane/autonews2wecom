@@ -11,6 +11,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+import io
+import sys
 
 # 从测试号信息获取
 appID = os.getenv("APPID")  # 从环境变量中获取
@@ -28,7 +30,6 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
     """
     使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格.
     """
-    print("fetch_eth_price 函数开始")
     try:
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
@@ -42,7 +43,7 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
             service = ChromeService(executable_path=driver_path)
         else:
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            driver_path = os.path.join(current_dir, 'chromedriver')  # 修改为 chromedriver
+            driver_path = os.path.join(current_dir, 'chromedriver')
             if not os.path.exists(driver_path):
                 print("chromedriver not found in current directory.")
                 return None
@@ -122,8 +123,8 @@ def get_access_token():
     return access_token
 
 
-def send_eth_price(access_token, eth_price):
-    print("send_eth_price 函数开始")
+def send_wechat_message(access_token, message):
+    print("send_wechat_message 函数开始")
     # touser 就是 openID
     # template_id 就是模板ID
     # url 就是点击模板跳转的url
@@ -134,16 +135,16 @@ def send_eth_price(access_token, eth_price):
         "template_id": eth_template_id.strip(),
         "url": "https://weixin.qq.com",
         "data": {
-            "eth": {
-                "value": eth_price
+            "ETH": {
+                "value": message  # 将所有日志内容放在这里
             },
         }
     }
-    print(f"send_eth_price body: {body}")
+    print(f"send_wechat_message body: {body}")
     url = 'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={}'.format(access_token)
     response = requests.post(url, json.dumps(body))
-    print(f"send_eth_price 响应: {response.text}")
-    print("send_eth_price 函数结束")
+    print(f"send_wechat_message 响应: {response.text}")
+    print("send_wechat_message 函数结束")
 
 
 def eth_report():
@@ -156,15 +157,22 @@ def eth_report():
     eth_price = fetch_eth_price(url)
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
-    send_eth_price(access_token, eth_price)
+    send_wechat_message(access_token, program_log.getvalue())  # 发送整个日志
     print("eth_report 函数结束")
 
 if __name__ == "__main__":
     print("__main__ 开始")
+    # 捕获所有输出
+    program_log = io.StringIO()
+    sys.stdout = program_log
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--driver_path", help="Path to chromedriver")
     parser.add_argument("--chromium_path", help="Path to chrome")
     args = parser.parse_args()
 
     eth_report()
+
+    # 恢复标准输出
+    sys.stdout = sys.__stdout__
     print("__main__ 结束")
