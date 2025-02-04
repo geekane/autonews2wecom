@@ -14,12 +14,6 @@ from bs4 import BeautifulSoup
 import io
 import sys
 
-# 定义全局变量
-program_log = io.StringIO(encoding="utf-8")  # 添加编码
-sys.stdout = program_log
-
-print("标准输出已重定向")  # 添加
-
 # 从测试号信息获取
 appID = os.getenv("APPID")  # 从环境变量中获取
 appSecret = os.getenv("APPSECRET")  # 从环境变量中获取
@@ -149,7 +143,7 @@ def send_wechat_message(access_token, message):
     }
     print(f"send_wechat_message body: {body}")
     url = 'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={}'.format(access_token)
-    response = requests.post(url, json.dumps(body))
+    response = requests.post(url, json.dumps(body.encode('utf-8').decode('unicode_escape')))
     print(f"send_wechat_message 响应: {response.text}")
     print("send_wechat_message 函数结束")
 
@@ -164,13 +158,16 @@ def eth_report():
     eth_price = fetch_eth_price(url)
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
-    send_wechat_message(access_token, program_log.getvalue())  # 发送整个日志
+    if eth_price:
+      send_wechat_message(access_token, program_log.getvalue())  # 发送整个日志
+    else:
+      send_wechat_message(access_token,"运行失败，未能获取ETH")
     print("eth_report 函数结束")
 
 if __name__ == "__main__":
     print("__main__ 开始")
     # 捕获所有输出
-    program_log = io.StringIO(encoding="utf-8")  # 添加编码
+    program_log = io.StringIO()
     sys.stdout = program_log
 
     try:  # 添加 try...finally 块
