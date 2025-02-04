@@ -12,6 +12,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+import schedule
+
 
 # 从测试号信息获取
 appID = os.getenv("APPID")  # 从环境变量中获取
@@ -22,6 +24,7 @@ openId = os.getenv("OPENID")  # 从环境变量中获取
 eth_template_id = os.getenv("ETH_TEMPLATE_ID")  # 从环境变量中获取
 
 def fetch_eth_price(url, driver_path=None, chromium_path=None):
+    print("fetch_eth_price 函数开始")
     """
     使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格.
     """
@@ -46,6 +49,7 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
 
         print(f"Using chromedriver at: {driver_path}") # 打印正在使用的chromedriver路径
         print(f"Python architecture: {platform.architecture()}") # 打印Python架构
+        print(f"ChromeOptions: {chrome_options.to_capabilities()}") # 打印 ChromeOptions
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get(url)
@@ -89,6 +93,7 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
         if price_span:
             price = price_span.text.strip()
             print(f"以太坊价格: {price}")
+            print("fetch_eth_price 函数结束，成功")
             return price
         else:
             print("获取价格失败: 未找到价格 span")
@@ -102,18 +107,23 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
             driver.quit()
         except:
             pass
+    print("fetch_eth_price 函数结束")
 
 def get_access_token():
+    print("get_access_token 函数开始")
     # 获取access token的url
     url = 'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={}&secret={}' \
         .format(appID.strip(), appSecret.strip())
     response = requests.get(url).json()
-    print(response)
+    print(f"get_access_token 响应: {response}")
     access_token = response.get('access_token')
+    print(f"access_token: {access_token}")
+    print("get_access_token 函数结束")
     return access_token
 
 
 def send_eth_price(access_token, eth_price):
+    print("send_eth_price 函数开始")
     # touser 就是 openID
     # template_id 就是模板ID
     # url 就是点击模板跳转的url
@@ -129,22 +139,33 @@ def send_eth_price(access_token, eth_price):
             },
         }
     }
+    print(f"send_eth_price body: {body}")
     url = 'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={}'.format(access_token)
-    print(requests.post(url, json.dumps(body)).text)
+    response = requests.post(url, json.dumps(body))
+    print(f"send_eth_price 响应: {response.text}")
+    print("send_eth_price 函数结束")
 
 
 def eth_report():
+    print("eth_report 函数开始")
     # 1.获取access_token
     access_token = get_access_token()
+    print(f"eth_report access_token: {access_token}")
     # 2. 获取以太坊价格
     url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%81/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
     eth_price = fetch_eth_price(url)
-    print(f"以太坊价格： {eth_price}")
+    print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
     send_eth_price(access_token, eth_price)
+    print("eth_report 函数结束")
+
 
 if __name__ == "__main__":
+    print("__main__ 开始")
     parser = argparse.ArgumentParser()
     parser.add_argument("--driver_path", help="Path to chromedriver")
     parser.add_argument("--chromium_path", help="Path to chrome")
     args = parser.parse_args()
+
+    eth_report()
+    print("__main__ 结束")
