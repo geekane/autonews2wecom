@@ -28,6 +28,15 @@ jobs:
           sudo apt-get install -y chromium-browser
           sudo apt-get install -y chromium-chromedriver
 
+      - name: Kill Chrome processes
+        run: |
+          pkill chrome || true
+          pkill chromedriver || true
+
+      - name: Clean /tmp directory
+        run: |
+          rm -rf /tmp/*
+
       - name: Run script
         run: |
           set -x
