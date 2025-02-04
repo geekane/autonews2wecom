@@ -11,8 +11,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
-import io
-import sys
 
 # 从测试号信息获取
 appID = os.getenv("APPID")  # 从环境变量中获取
@@ -30,7 +28,6 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
     """
     使用 Selenium 获取动态渲染的页面 HTML 并提取以太坊价格.
     """
-    print("fetch_eth_price 函数开始")
     try:
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
@@ -95,7 +92,6 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
         if price_span:
             price = price_span.text.strip()
             print(f"以太坊价格: {price}")
-            print("fetch_eth_price 函数结束，成功")
             return price
         else:
             print("获取价格失败: 未找到价格 span")
@@ -109,7 +105,6 @@ def fetch_eth_price(url, driver_path=None, chromium_path=None):
             driver.quit()
         except:
             pass
-        print("fetch_eth_price 函数结束")
 
 def get_access_token():
     print("get_access_token 函数开始")
@@ -119,8 +114,6 @@ def get_access_token():
     response = requests.get(url).json()
     print(f"get_access_token 响应: {response}")
     access_token = response.get('access_token')
-    print(f"access_token: {access_token}")
-    print("get_access_token 函数结束")
     return access_token
 
 
@@ -143,7 +136,7 @@ def send_wechat_message(access_token, message):
     }
     print(f"send_wechat_message body: {body}")
     url = 'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={}'.format(access_token)
-    response = requests.post(url, json=json.dumps(body)) # 移除 encode 和 decode
+    response = requests.post(url, json=json.dumps(body))
     print(f"send_wechat_message 响应: {response.text}")
     print("send_wechat_message 函数结束")
 
@@ -159,25 +152,17 @@ def eth_report():
     print(f"eth_report eth_price: {eth_price}")
     # 3. 发送消息
     if eth_price:
-      send_wechat_message(access_token, program_log.getvalue())  # 发送整个日志
+      send_wechat_message(access_token, eth_price)  # 发送 ETH 价格
     else:
-      send_wechat_message(access_token,"运行失败，未能获取ETH")
+      send_wechat_message(access_token, "未能获取以太坊价格")  # 发送默认消息
     print("eth_report 函数结束")
 
 if __name__ == "__main__":
     print("__main__ 开始")
-    # 捕获所有输出
-    program_log = io.StringIO()
-    sys.stdout = program_log
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--driver_path", help="Path to chromedriver")
+    parser.add_argument("--chromium_path", help="Path to chrome")
+    args = parser.parse_args()
 
-    try:  # 添加 try...finally 块
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--driver_path", help="Path to chromedriver")
-        parser.add_argument("--chromium_path", help="Path to chrome")
-        args = parser.parse_args()
-
-        eth_report()
-    finally:  # 确保恢复标准输出
-        # 恢复标准输出
-        sys.stdout = sys.__stdout__
-        print("__main__ 结束")
+    eth_report()
+    print("__main__ 结束")
