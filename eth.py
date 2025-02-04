@@ -148,12 +148,3 @@ if __name__ == "__main__":
     parser.add_argument("--driver_path", help="Path to chromedriver")
     parser.add_argument("--chromium_path", help="Path to chrome")
     args = parser.parse_args()
-
-    eth_report()
-
-    # 每天 18:30 发送以太坊价格报告
-    schedule.every().day.at("18:30").do(eth_report)
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
