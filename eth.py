@@ -2,7 +2,6 @@ import argparse
 import os
 import uuid
 import platform
-import time  # 导入 time
 import requests
 import json
 from selenium import webdriver
