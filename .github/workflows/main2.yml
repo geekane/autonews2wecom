@@ -1,4 +1,4 @@
-name: Fetch and Send Hot News
+name: Fetch 和 Send Hot News
 
 on:
   schedule:
