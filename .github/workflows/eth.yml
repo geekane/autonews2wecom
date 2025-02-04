@@ -28,6 +28,10 @@ jobs:
           sudo apt-get install -y chromium-browser
           sudo apt-get install -y chromium-chromedriver
 
+      - name: Make chromedriver executable
+        run: |
+          chmod +x chromedriver
+
       - name: Run script
         env:
           APPID: ${{ secrets.APPID }}  # 从 secrets 获取
