@@ -1,0 +1,42 @@
+name: Feishu Data Sync # 给你的 workflow 起个名字
+
+on:
+  schedule:
+    - cron: '*/50 * * * *'  # 每 50 分钟运行一次 (可以根据需要调整)
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  fetch-and-write: # 给你的 job 起个名字
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10' # 确保 Python 版本和本地一致
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # 安装 Playwright 和飞书 SDK (lark-oapi)
+          # 建议创建一个 requirements.txt 文件列出所有依赖更佳
+          pip install playwright lark-oapi lark_oapi Jinja2 httpx websockets python-dotenv pycryptodome
+
+      # --- Playwright 安装浏览器 ---
+      - name: Install Playwright Browsers and dependencies
+        run: |
+          # 安装 Chromium 浏览器以及它在 Linux 上需要的系统依赖
+          playwright install --with-deps chromium
+
+      # --- 运行你的 Python 脚本 ---
+      - name: Run Feishu Writer Script
+        env:
+          # !!! 从 GitHub Secrets 读取飞书密钥并设置为环境变量 !!!
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          # CI: true # GitHub Actions 会自动设置这个，脚本会检测到并使用 headless 模式
+        run: |
+          # 假设你的 Python 脚本文件名为 main.py，如果不是请修改
+          python main.py # 或者你的脚本文件名.py
