@@ -38,5 +38,4 @@ jobs:
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
           # CI: true # GitHub Actions 会自动设置这个，脚本会检测到并使用 headless 模式
         run: |
-          # 假设你的 Python 脚本文件名为 main.py，如果不是请修改
-          python main.py # 或者你的脚本文件名.py
+          python jingchaowandata.py
