@@ -2,8 +2,8 @@ name: ETH价格追踪
 
 on:
   schedule:
-    - cron: '*/50 * * * *'  # 每隔 5 分钟运行
-  workflow_dispatch: # 添加 workflow_dispatch 事件
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   fetch-and-send:
