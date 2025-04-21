@@ -1,9 +1,9 @@
-name: Feishu Data Sync # 给你的 workflow 起个名字
+name: Feishu Data Sync
 
 on:
   schedule:
-    - cron: '*/50 * * * *'  # 每 50 分钟运行一次 (可以根据需要调整)
-  workflow_dispatch: # 允许手动触发
+    - cron: '30 2 * * *'  # 这表示每天 UTC 时间 2:30，即北京时间 10:30 运行
+  workflow_dispatch:
 
 jobs:
   fetch-and-write: # 给你的 job 起个名字
