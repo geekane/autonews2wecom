@@ -1,7 +1,7 @@
 [
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1749817957.525773,
+        "expirationDate": 1750041271.123517,
         "hostOnly": false,
         "httpOnly": true,
         "name": "sessionid",
@@ -10,11 +10,24 @@
         "secure": false,
         "session": false,
         "storeId": null,
-        "value": "c99123e408f98c5591c9020ab15992b5"
+        "value": "5bac6d371749a4a6f17213fc4b562ed5"
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1749817957.525684,
+        "expirationDate": 1747450597.123293,
+        "hostOnly": false,
+        "httpOnly": true,
+        "name": "passport_auth_status",
+        "path": "/",
+        "sameSite": null,
+        "secure": false,
+        "session": false,
+        "storeId": null,
+        "value": "a17c787898ff225084f9dc405d145fcf%2C8caa814ba3bcd0ecf0767d0b0328a7f7"
+    },
+    {
+        "domain": ".life-data.cn",
+        "expirationDate": 1750041271.123462,
         "hostOnly": false,
         "httpOnly": true,
         "name": "uid_tt_ss",
@@ -23,7 +36,7 @@
         "secure": true,
         "session": false,
         "storeId": null,
-        "value": "2864fcce1114c9d6ba9ab6d5c59f2965"
+        "value": "34505c414714db314a5f43531a2f733b"
     },
     {
         "domain": "www.life-data.cn",
@@ -35,11 +48,24 @@
         "secure": true,
         "session": true,
         "storeId": null,
-        "value": "f791f4f8d3a6a107327835388f14a214"
+        "value": "d34454a0f5c8afe73425dc8b01c0f212"
+    },
+    {
+        "domain": "www.life-data.cn",
+        "expirationDate": 1745481011.447406,
+        "hostOnly": true,
+        "httpOnly": true,
+        "name": "gd_random",
+        "path": "/",
+        "sameSite": null,
+        "secure": false,
+        "session": false,
+        "storeId": null,
+        "value": "eyJtYXRjaCI6dHJ1ZSwicGVyY2VudCI6MC4xMjU0MTMwNTQwMjIwMDYzfQ==.uQg3iYHipwLlU2jdmCrdJajenbgkDDp45IAvwt1Iufo="
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1749817957.525632,
+        "expirationDate": 1750041271.123436,
         "hostOnly": false,
         "httpOnly": true,
         "name": "uid_tt",
@@ -48,11 +74,11 @@
         "secure": false,
         "session": false,
         "storeId": null,
-        "value": "2864fcce1114c9d6ba9ab6d5c59f2965"
+        "value": "34505c414714db314a5f43531a2f733b"
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1749817957.52586,
+        "expirationDate": 1750041271.123568,
         "hostOnly": false,
         "httpOnly": true,
         "name": "is_staff_user",
@@ -65,7 +91,20 @@
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1745932765.7127,
+        "expirationDate": 1747450597.123376,
+        "hostOnly": false,
+        "httpOnly": true,
+        "name": "passport_auth_status_ss",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "a17c787898ff225084f9dc405d145fcf%2C8caa814ba3bcd0ecf0767d0b0328a7f7"
+    },
+    {
+        "domain": ".life-data.cn",
+        "expirationDate": 1746927453.833861,
         "hostOnly": false,
         "httpOnly": false,
         "name": "passport_csrf_token",
@@ -74,11 +113,11 @@
         "secure": true,
         "session": false,
         "storeId": null,
-        "value": "44f30bad85aafb97d97440ec924005c8"
+        "value": "fc45b44911bb144f3da43e85945ed03e"
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1745932765.712761,
+        "expirationDate": 1746927453.833925,
         "hostOnly": false,
         "httpOnly": false,
         "name": "passport_csrf_token_default",
@@ -87,11 +126,11 @@
         "secure": false,
         "session": false,
         "storeId": null,
-        "value": "44f30bad85aafb97d97440ec924005c8"
+        "value": "fc45b44911bb144f3da43e85945ed03e"
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1749817957.525821,
+        "expirationDate": 1750041271.123543,
         "hostOnly": false,
         "httpOnly": true,
         "name": "sessionid_ss",
@@ -100,11 +139,11 @@
         "secure": true,
         "session": false,
         "storeId": null,
-        "value": "c99123e408f98c5591c9020ab15992b5"
+        "value": "5bac6d371749a4a6f17213fc4b562ed5"
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1776338831.525501,
+        "expirationDate": 1775962597.123408,
         "hostOnly": false,
         "httpOnly": true,
         "name": "sid_guard",
@@ -113,11 +152,11 @@
         "secure": false,
         "session": false,
         "storeId": null,
-        "value": "c99123e408f98c5591c9020ab15992b5%7C1745234828%7C4583126%7CFri%2C+13-Jun-2025+12%3A32%3A34+GMT"
+        "value": "5bac6d371749a4a6f17213fc4b562ed5%7C1744858597%7C5182674%7CMon%2C+16-Jun-2025+02%3A34%3A31+GMT"
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1749817957.525726,
+        "expirationDate": 1750041271.123491,
         "hostOnly": false,
         "httpOnly": true,
         "name": "sid_tt",
@@ -126,11 +165,11 @@
         "secure": false,
         "session": false,
         "storeId": null,
-        "value": "c99123e408f98c5591c9020ab15992b5"
+        "value": "5bac6d371749a4a6f17213fc4b562ed5"
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1749817957.525891,
+        "expirationDate": 1750041271.123599,
         "hostOnly": false,
         "httpOnly": true,
         "name": "sid_ucp_v1",
@@ -139,11 +178,11 @@
         "secure": true,
         "session": false,
         "storeId": null,
-        "value": "1.0.0-KDdmZTNiZWQyZTJlMzliYzgxYWJlNjA2NzU5MGU0NmNiOTVhMzNlMWYKGAj-xLC9_cykAhCM15jABhjMrB04AUDrBxoCbGYiIGM5OTEyM2U0MDhmOThjNTU5MWM5MDIwYWIxNTk5MmI1"
+        "value": "1.0.0-KGI5YmFjMTBkOThkZWU5ZWQ5MGFiZWYzN2RhOWVkZWFiMGViNDYzODkKGAj-xLC9_cykAhDl24HABhjMrB04AUDrBxoCbHEiIDViYWM2ZDM3MTc0OWE0YTZmMTcyMTNmYzRiNTYyZWQ1"
     },
     {
         "domain": ".life-data.cn",
-        "expirationDate": 1749817957.525926,
+        "expirationDate": 1750041271.123628,
         "hostOnly": false,
         "httpOnly": true,
         "name": "ssid_ucp_v1",
@@ -152,6 +191,6 @@
         "secure": true,
         "session": false,
         "storeId": null,
-        "value": "1.0.0-KDdmZTNiZWQyZTJlMzliYzgxYWJlNjA2NzU5MGU0NmNiOTVhMzNlMWYKGAj-xLC9_cykAhCM15jABhjMrB04AUDrBxoCbGYiIGM5OTEyM2U0MDhmOThjNTU5MWM5MDIwYWIxNTk5MmI1"
+        "value": "1.0.0-KGI5YmFjMTBkOThkZWU5ZWQ5MGFiZWYzN2RhOWVkZWFiMGViNDYzODkKGAj-xLC9_cykAhDl24HABhjMrB04AUDrBxoCbHEiIDViYWM2ZDM3MTc0OWE0YTZmMTcyMTNmYzRiNTYyZWQ1"
     }
 ]
