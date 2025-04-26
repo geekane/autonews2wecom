@@ -11,7 +11,7 @@ from lark_oapi.api.bitable.v1 import *
 
 # --- 配置 ---
 COOKIE_FILE = 'laike.json' # 确保这个文件和脚本一起在仓库中
-TARGET_URL = 'https://www.life-data.cn/?groupid=1768205901316096&channel_id=laike_data_first_menu'
+TARGET_URL = 'https://www.life-data.cn/?groupid=1768205901316096'
 DATA_CONTAINER_SELECTOR = "#tradeMeasure"
 
 # --- !!! 从环境变量读取飞书配置 !!! ---
