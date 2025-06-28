@@ -1,4 +1,4 @@
-# 文件名: chouyong_cli.py (真正完整且正确的版本)
+# 文件名: chouyong_cli.py (最终正确版 - 修正元素定位)
 
 import logging
 import json
@@ -59,7 +59,7 @@ class CliRunner:
             sys.exit(1)
 
     # ==============================================================================
-    # 所有辅助函数都放在这里
+    # 所有辅助函数
     # ==============================================================================
 
     def _init_feishu_client(self):
@@ -72,131 +72,6 @@ class CliRunner:
         self.feishu_client = lark.Client.builder().app_id(app_id).app_secret(app_secret).log_level(lark.LogLevel.WARNING).build()
         logging.info("飞书客户端初始化成功。")
         return True
-
-    def _get_douyin_client_token(self, douyin_configs):
-        url = "https://open.douyin.com/oauth/client_token/"
-        payload = {"client_key": douyin_configs['douyin_key'], "client_secret": douyin_configs['douyin_secret'], "grant_type": "client_credential"}
-        headers = {"Content-Type": "application/json"}
-        logging.info("开始获取抖音 Client Token...")
-        try:
-            response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("data") and "access_token" in data["data"]:
-                self.douyin_access_token = data["data"]["access_token"]
-                logging.info("成功获取抖音 Client Token。")
-                return True
-            else:
-                error_msg = data.get("data", {}).get("description", "获取Token失败")
-                logging.error(f"获取抖音Token失败: {error_msg}")
-                return False
-        except requests.RequestException as e:
-            logging.error(f"请求抖音Token时出错: {e}")
-            return False
-
-    def _load_poi_ids_from_excel(self, file_path):
-        try:
-            df = pd.read_excel(file_path, header=0, usecols=[0], dtype=str)
-            poi_ids = df.iloc[:, 0].dropna().astype(str).str.strip().tolist()
-            if not poi_ids:
-                logging.error(f"未能从Excel文件 '{file_path}' 的第一列读取到任何POI ID。")
-                return []
-            logging.info(f"成功从 '{file_path}' 加载 {len(poi_ids)} 个POI ID。")
-            return poi_ids
-        except Exception as e:
-            logging.error(f"读取Excel '{file_path}' 时出错: {e}")
-            return []
-
-    def _query_douyin_online_products(self, params):
-        if not self.douyin_access_token:
-            logging.error("抖音 Access Token 缺失, 无法查询。")
-            return {"success": False, "message": "抖音 Access Token 缺失"}
-        url = "https://open.douyin.com/goodlife/v1/goods/product/online/query/"
-        headers = {'Content-Type': 'application/json', 'access-token': self.douyin_access_token}
-        try:
-            response = requests.get(url, headers=headers, params=params, timeout=30)
-            response.raise_for_status()
-            response_json = response.json()
-            if response_json.get("BaseResp", {}).get("StatusCode") == 0:
-                return {"success": True, **response_json.get("data", {})}
-            else:
-                error_message = response_json.get("BaseResp", {}).get("StatusMessage", "未知API错误")
-                logging.error(f"查询抖音API返回错误: {error_message}. 完整响应: {response_json}")
-                return {"success": False, "message": f"API错误: {error_message}"}
-        except Exception as e:
-            logging.error(f"查询抖音线上商品时发生严重错误: {e}", exc_info=True)
-            return {"success": False, "message": f"请求错误: {e}"}
-
-    def _get_all_product_ids_for_poi(self, poi_id, account_id):
-        all_product_ids = set()
-        current_cursor, page = "", 1
-        while True:
-            logging.info(f"    查询POI[{poi_id}] 第 {page} 页...")
-            params = {"account_id": account_id, "poi_ids": [poi_id], "count": 50, "cursor": current_cursor}
-            result = self._query_douyin_online_products(params)
-            if result.get("success"):
-                for p_info in result.get("products", []):
-                    if product_id_val := p_info.get("product", {}).get("product_id"):
-                        all_product_ids.add(str(product_id_val))
-                if result.get("has_more"):
-                    current_cursor, page = result.get("next_cursor", ""), page + 1
-                    time.sleep(0.2)
-                else:
-                    break
-            else:
-                logging.error(f"    错误：查询POI[{poi_id}]失败: {result.get('message')}")
-                return set()
-        logging.info(f"    POI[{poi_id}]查询完成，找到 {len(all_product_ids)} 个商品ID。")
-        return all_product_ids
-
-    def _add_records_to_feishu_table(self, records_to_add, app_token, table_id):
-        if not records_to_add: return {"success": True}
-        if not self.feishu_client: return {"success": False, "message": "飞书客户端未初始化"}
-        try:
-            request_body = BatchCreateAppTableRecordRequestBody.builder().records(records_to_add).build()
-            req = BatchCreateAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).request_body(request_body).build()
-            res = self.feishu_client.bitable.v1.app_table_record.batch_create(req)
-            if not res.success():
-                error_details = f"Code={res.code}, Msg={res.msg}, LogID={res.get_log_id()}"
-                logging.error(f"新增记录到飞书失败: {error_details}")
-                return {"success": False, "message": f"新增失败: {res.msg} (Code: {res.code})"}
-            logging.info(f"成功向飞书表格新增 {len(res.data.records)} 条记录。")
-            return {"success": True}
-        except Exception as e:
-            logging.error(f"写入飞书时发生未知错误: {e}", exc_info=True)
-            return {"success": False, "message": f"未知错误: {e}"}
-            
-    def _get_all_existing_product_ids_from_feishu(self):
-        field_name = self.configs['feishu_field_name']
-        logging.info(f"开始从飞书获取已存在的商品ID，目标列: '{field_name}'...")
-        existing_ids = set()
-        page_token = None
-        while True:
-            try:
-                request_body = SearchAppTableRecordRequestBody.builder().field_names([field_name]).build()
-                request_builder = SearchAppTableRecordRequest.builder().app_token(self.configs['feishu_app_token']).table_id(self.configs['feishu_table_id']).page_size(500).request_body(request_body)
-                if page_token:
-                    request_builder.page_token(page_token)
-                request = request_builder.build()
-                response = self.feishu_client.bitable.v1.app_table_record.search(request)
-                if not response.success():
-                    logging.error(f"查询飞书现有记录失败: Code={response.code}, Msg={response.msg}")
-                    return None
-                items = response.data.items or []
-                for item in items:
-                    if field_name in item.fields and item.fields[field_name]:
-                        product_id_text = item.fields[field_name][0].get('text', '')
-                        if product_id_text:
-                            existing_ids.add(product_id_text.strip())
-                if response.data.has_more:
-                    page_token = response.data.page_token
-                else:
-                    break
-            except Exception as e:
-                logging.error(f"查询飞书现有记录时发生异常: {e}", exc_info=True)
-                return None
-        logging.info(f"成功从飞书获取到 {len(existing_ids)} 个已存在的商品ID。")
-        return existing_ids
 
     async def _get_empty_commission_records_from_feishu(self):
         source_field = self.configs["get_commission_source_field"]
@@ -251,23 +126,33 @@ class CliRunner:
             try:
                 if attempt > 0:
                     logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次重试，刷新页面...")
-                    await page.reload(wait_until="domcontentloaded", timeout=20000)
-                await page.locator(".okee-lp-Table-Header").wait_for(state="visible", timeout=20000)
-                input_field = page.get_by_role("textbox", name="商品名称/ID")
-                await input_field.fill("", timeout=15000)
-                await input_field.fill(str(product_id), timeout=15000)
+                    await page.reload(wait_until="domcontentloaded", timeout=60000)
+                
+                await page.locator(".okee-lp-Table-Header").wait_for(state="visible", timeout=60000)
+
+                # --- 核心修改：使用更可靠的占位符定位器 ---
+                input_field = page.get_by_placeholder("请输入")
+                await expect(input_field).to_be_visible(timeout=15000) # 确认输入框可见
+                
+                await input_field.fill(str(product_id))
+
                 async with page.expect_response(lambda response: "/api/life/service/mall/merchant/commission/product/list" in response.url, timeout=60000) as response_info:
-                    await page.get_by_test_id("查询").click(force=True, timeout=15000)
+                    await page.get_by_test_id("查询").click(force=True)
+                
                 response = await response_info.value
                 if not response.ok:
                     raise Exception(f"API request failed with status {response.status}")
+
                 result_row = page.locator(f".okee-lp-Table-Row:has-text('{str(product_id)}')").first
                 await result_row.wait_for(state="visible", timeout=30000)
+                
                 commission_status_locator = result_row.locator(".okee-lp-tag")
                 await expect(commission_status_locator).to_be_visible(timeout=10000)
+                
                 status_text = (await commission_status_locator.text_content() or "").strip()
                 status_result = "已设置" if status_text == "已设置" else f"未设置 ({status_text})"
                 commission_info = "未找到"
+
                 if status_result == "已设置":
                     channel_info_locator = result_row.locator("div:has-text('%')")
                     try:
@@ -276,7 +161,9 @@ class CliRunner:
                     except Exception:
                        logging.warning(f"    ! [ID: {product_id}] 状态为'已设置'但未找到佣金渠道文本。")
                        commission_info = "已设置但无详细比例"
+
                 return status_result, commission_info
+
             except Exception as e:
                 error_msg_line = str(e).splitlines()[0]
                 logging.warning(f"    ! [ID: {product_id}] 在第 {attempt + 1} 次尝试中发生错误: {error_msg_line}")
@@ -287,120 +174,18 @@ class CliRunner:
                     logging.info(f"      截图已保存至: {screenshot_path}")
                 except Exception as screenshot_error:
                     logging.error(f"      尝试保存错误截图失败: {screenshot_error}")
+
                 if attempt >= max_retries:
                     logging.error(f"    !! [ID: {product_id}] 所有重试均失败。")
                     return "查询失败", f"多次重试失败: {error_msg_line}"
                 else:
                     await asyncio.sleep(retry_delay)
+        
         return "查询失败", "未知错误"
 
     # ==============================================================================
-    # 任务执行函数
+    # 主任务流程
     # ==============================================================================
-
-    async def task_sync_feishu_ids(self):
-        logging.info("==================================================")
-        logging.info("========== 开始执行步骤2: 同步商品ID到飞书 ==========")
-        logging.info("==================================================")
-        try:
-            if not self._init_feishu_client(): return
-            douyin_configs = {"douyin_key": self.configs.get("douyin_key"), "douyin_secret": self.configs.get("douyin_secret"), "douyin_account_id": self.configs.get("douyin_account_id")}
-            if not self._get_douyin_client_token(douyin_configs): return
-            existing_feishu_ids = self._get_all_existing_product_ids_from_feishu()
-            if existing_feishu_ids is None:
-                logging.error("无法从飞书获取现有数据，任务中止。")
-                return
-            poi_excel_path = self.configs['feishu_poi_excel']
-            if not os.path.exists(poi_excel_path):
-                logging.error(f"找不到门店ID文件: {poi_excel_path}")
-                return
-            poi_ids = self._load_poi_ids_from_excel(poi_excel_path)
-            if not poi_ids: return
-            poi_batch_size = self.configs.get('poi_batch_size', 20)
-            total_poi_batches = (len(poi_ids) + poi_batch_size - 1) // poi_batch_size
-            for i in range(0, len(poi_ids), poi_batch_size):
-                poi_chunk = poi_ids[i:i + poi_batch_size]
-                current_batch_num = i // poi_batch_size + 1
-                logging.info(f"\n--- 开始处理POI批次 {current_batch_num}/{total_poi_batches} ({len(poi_chunk)}个POI) ---")
-                all_product_ids_for_chunk = set()
-                with concurrent.futures.ThreadPoolExecutor(max_workers=self.configs.get('feishu_max_workers', 5)) as executor:
-                    future_to_poi = {executor.submit(self._get_all_product_ids_for_poi, poi, douyin_configs['douyin_account_id']): poi for poi in poi_chunk}
-                    for future in concurrent.futures.as_completed(future_to_poi):
-                        product_ids_set = future.result()
-                        if product_ids_set: all_product_ids_for_chunk.update(product_ids_set)
-                ids_to_add = all_product_ids_for_chunk - existing_feishu_ids
-                if not ids_to_add:
-                    logging.info(f"--- POI批次 {current_batch_num} 未查询到任何【新的】商品ID可写入，跳过。 ---")
-                    continue
-                logging.info(f"POI批次 {current_batch_num} 查询结束，共收集到 {len(all_product_ids_for_chunk)} 个ID，其中 {len(ids_to_add)} 个是新ID，准备写入飞书...")
-                records_to_create = [AppTableRecord.builder().fields({self.configs['feishu_field_name']: str(pid)}).build() for pid in ids_to_add]
-                for j in range(0, len(records_to_create), 500):
-                    record_batch = records_to_create[j:j+500]
-                    logging.info(f"  向飞书写入数据... (部分 {j//500 + 1})")
-                    add_result = self._add_records_to_feishu_table(record_batch, self.configs['feishu_app_token'], self.configs['feishu_table_id'])
-                    if not add_result["success"]:
-                        logging.error(f"  写入飞书失败: {add_result.get('message')}"); break
-                    else:
-                        existing_feishu_ids.update(ids_to_add)
-            logging.info("\n步骤2: 所有POI批次处理完成！")
-        except Exception as e:
-            logging.error(f"步骤2主线程出错: {e}", exc_info=True)
-        finally:
-            self.feishu_client = None
-
-    async def async_get_commission_worker(self, tasks_to_process):
-        max_retries = self.configs.get("max_retries", 3)
-        retry_delay = self.configs.get("retry_delay", 2)
-        base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId={self.configs['douyin_account_id']}&orderId=7494097018429261839&queryScene=0&skuOrderId=1829003050957856&tabName=ChargeSetting"
-        
-        browser = None
-        page = None
-        try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                
-                logging.info(f"正在从文件 '{COOKIE_FILE}' 加载登录状态...")
-                if not os.path.exists(COOKIE_FILE):
-                    raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。")
-                
-                context = await browser.new_context(storage_state=COOKIE_FILE)
-                logging.info("成功加载登录状态。")
-                
-                page = await context.new_page()
-                
-                logging.info(f"导航到目标页面: {base_url}")
-                await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
-                logging.info("页面加载完成。")
-                
-                total_tasks = len(tasks_to_process)
-                for i, task in enumerate(tasks_to_process):
-                    product_id, record_id = task["id"], task["record_id"]
-                    logging.info(f"--- [进度 {i+1}/{total_tasks}] 开始处理ID: {product_id} ---")
-                    
-                    status, commission_info = await self._process_id_on_page(page, product_id, max_retries, retry_delay)
-                    
-                    if status == "已设置":
-                        logging.info(f"  -> ID {product_id} 查询到佣金: {commission_info}，回写飞书...")
-                        success = await self._update_feishu_record(record_id, commission_info)
-                        if success: logging.info(f"  ✔ 回写记录 {record_id} 成功。")
-                        else: logging.error(f"  ❌ 回写记录 {record_id} 失败。")
-                    else:
-                        logging.info(f"  -> ID {product_id} 未查询到佣金 ({status})，跳过回写。")
-        
-        except Exception as e:
-            logging.error(f"工作者主流程发生错误: {e}", exc_info=True)
-            if page and not page.is_closed():
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                error_screenshot_path = os.path.join(DEBUG_DIR, f"worker_error_{timestamp}.png")
-                try:
-                    await page.screenshot(path=error_screenshot_path, full_page=True)
-                    logging.info(f"捕获到错误的截图已保存至: {error_screenshot_path}")
-                except Exception as screenshot_error:
-                    logging.error(f"尝试捕获错误截图失败: {screenshot_error}")
-        finally:
-            if browser:
-                await browser.close()
-            logging.info("\n所有佣金查询任务处理完成！")
 
     async def task_get_commission(self):
         logging.info("启动查询并回写佣金任务...")
@@ -417,25 +202,57 @@ class CliRunner:
                 return
                 
             logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条待处理记录。")
-            # 直接调用worker，不再有中间的验证环节
-            await self.async_get_commission_worker(tasks_to_process)
+
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                
+                logging.info(f"正在从文件 '{COOKIE_FILE}' 加载登录状态...")
+                if not os.path.exists(COOKIE_FILE):
+                    raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。")
+                
+                context = await browser.new_context(storage_state=COOKIE_FILE)
+                logging.info("成功加载登录状态。")
+                
+                page = await context.new_page()
+                
+                base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId={self.configs['douyin_account_id']}&orderId=7494097018429261839&queryScene=0&skuOrderId=1829003050957856&tabName=ChargeSetting"
+                logging.info(f"导航到目标页面: {base_url}")
+                await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
+                
+                logging.info("页面加载完成，给予5秒稳定时间...")
+                await page.wait_for_timeout(5000)
+                
+                total_tasks = len(tasks_to_process)
+                for i, task in enumerate(tasks_to_process):
+                    product_id, record_id = task["id"], task["record_id"]
+                    logging.info(f"--- [进度 {i+1}/{total_tasks}] 开始处理ID: {product_id} ---")
+                    
+                    status, commission_info = await self._process_id_on_page(page, product_id, self.configs.get("max_retries", 3), 2)
+                    
+                    if status == "已设置":
+                        logging.info(f"  -> ID {product_id} 查询到佣金: {commission_info}，回写飞书...")
+                        success = await self._update_feishu_record(record_id, commission_info)
+                        if success: logging.info(f"  ✔ 回写记录 {record_id} 成功。")
+                        else: logging.error(f"  ❌ 回写记录 {record_id} 失败。")
+                    else:
+                        logging.info(f"  -> ID {product_id} 未查询到佣金 ({status})，跳过回写。")
+                
+                await browser.close()
 
         except Exception as e:
-            logging.error(f"获取佣金任务主线程出错: {e}", exc_info=True)
+            logging.error(f"任务主流程发生错误: {e}", exc_info=True)
         finally:
             self.feishu_client = None
             logging.info("\n获取佣金任务执行完毕。")
 
 # ==============================================================================
-# 程序主入口 (CLI Version)
+# 程序主入口
 # ==============================================================================
 async def main():
     runner = CliRunner()
-    
-    # 按照您的要求，可以灵活执行任务
-    await runner.task_sync_feishu_ids()
+    # 为保持简单，暂时只运行第二个任务
+    # await runner.task_sync_feishu_ids() 
     await runner.task_get_commission()
-    
     logging.info("所有任务执行完毕。")
 
 if __name__ == "__main__":
