@@ -1,4 +1,4 @@
-# 文件名: chouyong_cli.py (最终生产稳定版 - 移除Stealth)
+# 文件名: chouyong_cli.py (最终正确版 - 从文件加载Cookie)
 
 import logging
 import json
@@ -19,13 +19,13 @@ try:
     import requests
     import lark_oapi as lark
     from lark_oapi.api.bitable.v1 import *
-    # 已移除 playwright_stealth 的导入
 except ImportError as e:
     missing_lib = e.name
     print(f"致命错误: 缺少 '{missing_lib}' 库。请运行 'pip install -r requirements.txt' 后重试。")
     sys.exit(1)
 
 CONFIG_FILE = "config.json"
+COOKIE_FILE = "林客.json" # 定义Cookie文件名
 LOG_DIR = "logs"
 DEBUG_DIR = "debug_artifacts"
 
@@ -60,6 +60,7 @@ class CliRunner:
 
     # ==============================================================================
     # 第2步: 飞书 | 同步商品ID (所有相关函数)
+    # 这部分保持不变
     # ==============================================================================
 
     def _get_douyin_client_token(self, douyin_configs):
@@ -389,35 +390,30 @@ class CliRunner:
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
-                context = await browser.new_context()
-
-                logging.info("正在从环境变量加载Cookie...")
-                cookie_str = os.getenv("LIFE_PARTNER_COOKIE")
-                if not cookie_str:
-                    raise Exception("未能从Secret 'LIFE_PARTNER_COOKIE' 中获取Cookie。请在仓库的Settings->Secrets中设置它。")
-
-                cookies = []
-                domain = ".life-partner.cn"
-                for item in cookie_str.split(';'):
-                    item = item.strip()
-                    if not item or '=' not in item: continue
-                    name, value = item.split('=', 1)
-                    cookies.append({'name': name, 'value': value, 'domain': domain, 'path': '/'})
                 
-                await context.add_cookies(cookies)
-                logging.info("成功将Cookie注入浏览器。")
+                # --- 核心修改：从文件加载登录状态 ---
+                logging.info(f"正在从文件 '{COOKIE_FILE}' 加载登录状态...")
+                if not os.path.exists(COOKIE_FILE):
+                    raise Exception(f"Cookie文件 '{COOKIE_FILE}' 未找到。请确保该文件与脚本在同一目录下。")
+                
+                context = await browser.new_context(storage_state=COOKIE_FILE)
+                logging.info(f"成功从 '{COOKIE_FILE}' 加载登录状态。")
+                # --- 加载逻辑结束 ---
                 
                 page = await context.new_page()
                 
+                # 登录验证依然是一个好习惯
                 logging.info("验证登录状态...")
                 await page.goto("https://www.life-partner.cn/data-center", timeout=60000)
                 await expect(page.get_by_text("数据看板")).to_be_visible(timeout=30000)
                 logging.info("登录验证成功！")
 
+                # 导航到目标页面
                 base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId={self.configs['douyin_account_id']}&orderId=7494097018429261839&queryScene=0&skuOrderId=1829003050957856&tabName=ChargeSetting"
                 await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
                 logging.info("已成功导航到佣金设置页面。")
 
+                # 顺序处理所有任务
                 total_tasks = len(tasks_to_process)
                 for i, task in enumerate(tasks_to_process):
                     logging.info(f"--- [进度 {i+1}/{total_tasks}] 处理ID: {task['id']} ---")
