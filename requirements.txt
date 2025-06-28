@@ -1,0 +1,5 @@
+openpyxl
+playwright
+pandas
+requests
+lark-oapi
