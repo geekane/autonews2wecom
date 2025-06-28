@@ -317,24 +317,39 @@ class CliRunner:
                 if attempt > 0:
                     logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次重试，刷新页面...")
                     await page.reload(wait_until="domcontentloaded", timeout=60000)
-                    await page.wait_for_timeout(2000)
+                
+                # --- 关键修改点 1: 在操作前，先等待一个稳定的标志 ---
+                # 等待页面上某个核心的、稳定的元素出现，比如整个页面的标题或某个不会变的容器。
+                # 这标志着页面的主要框架已经渲染稳定。
+                # 我们选择等待表格的头部出现，这是一个很好的稳定标志。
+                await page.locator(".okee-lp-Table-Header").wait_for(state="visible", timeout=60000)
 
+                # --- 关键修改点 2: 链式操作，让 Playwright 内部处理重试 ---
+                # 不要分步操作，而是将定位和操作链接在一起。
+                # Playwright 的自动重试机制在链式调用时表现最好。
                 input_field = page.get_by_role("textbox", name="商品名称/ID")
-                await expect(input_field).to_be_visible(timeout=45000)
-                await input_field.clear()
-                await input_field.fill(str(product_id))
+                
+                # 清空和填充
+                await input_field.fill("", timeout=15000) # 先用空字符串清空
+                await input_field.fill(str(product_id), timeout=15000)
 
-                async with page.expect_response(lambda response: "/api/life/service/mall/merchant/commission/product/list" in response.url, timeout=45000) as response_info:
-                    await page.get_by_test_id("查询").click(force=True)
+                # 点击并等待网络响应
+                async with page.expect_response(lambda response: "/api/life/service/mall/merchant/commission/product/list" in response.url, timeout=60000) as response_info:
+                    await page.get_by_test_id("查询").click(force=True, timeout=15000) # 保持force=True，并给点击本身也加上超时
                 
                 response = await response_info.value
                 if not response.ok:
                     raise Exception(f"API request failed with status {response.status}")
 
-                id_in_result_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first.get_by_text(str(product_id), exact=True)
-                await expect(id_in_result_locator).to_be_visible(timeout=15000)
+                # --- 关键修改点 3: 等待结果时也更加耐心 ---
+                # 查询后，表格内容会重新渲染。我们等待新的行出现。
+                # 使用 .first 来确保我们定位到的是第一个（通常是最新的）结果行
+                result_row = page.locator(f".okee-lp-Table-Row:has-text('{str(product_id)}')").first
+                await result_row.wait_for(state="visible", timeout=30000)
                 
-                commission_status_locator = page.locator(".okee-lp-Table-Cell > .lp-flex > .okee-lp-tag").first
+                # 在结果行（result_row）的范围内查找后续元素，而不是在整个页面（page）上找。
+                # 这能大大提高定位的准确性和速度。
+                commission_status_locator = result_row.locator(".okee-lp-tag")
                 await expect(commission_status_locator).to_be_visible(timeout=10000)
                 
                 status_text = (await commission_status_locator.text_content() or "").strip()
@@ -342,16 +357,21 @@ class CliRunner:
                 commission_info = "未找到"
 
                 if status_result == "已设置":
-                    channel_info_locator = page.locator("div.lp-flex.lp-items-center:has-text('%')").first
-                    if await channel_info_locator.is_visible(timeout=5000):
-                        commission_info = (await channel_info_locator.text_content() or "").strip().replace('"', '')
-                
+                    channel_info_locator = result_row.locator("div:has-text('%')")
+                    # 这里我们用 try-except 更稳妥，因为不是所有“已设置”状态都有佣金渠道信息
+                    try:
+                       await expect(channel_info_locator).to_be_visible(timeout=5000)
+                       commission_info = (await channel_info_locator.text_content() or "").strip().replace('"', '')
+                    except Exception:
+                       logging.warning(f"    ! [ID: {product_id}] 状态为'已设置'但未找到佣金渠道文本。")
+                       commission_info = "已设置但无详细比例"
+
                 return status_result, commission_info
 
             except Exception as e:
+                # ... (异常处理和截图逻辑保持不变) ...
                 error_msg_line = str(e).splitlines()[0]
                 logging.warning(f"    ! [ID: {product_id}] 在第 {attempt + 1} 次尝试中发生错误: {error_msg_line}")
-
                 try:
                     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                     screenshot_path = os.path.join(DEBUG_DIR, f"error_screenshot_{product_id}_attempt{attempt+1}_{timestamp}.png")
