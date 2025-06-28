@@ -1,12 +1,9 @@
-name: Run linkechouyong Tasks
+name: Run Commission Tasks
 
 on:
-  # 允许你手动在 GitHub Actions 页面点击 "Run workflow" 来触发
   workflow_dispatch:
-
-  # 也可以设置定时任务，例如每天北京时间上午9点运行
   # schedule:
-  #   - cron: '0 1 * * *' # Cron 语法，这是 UTC 时间 1:00 AM
+  #   - cron: '0 1 * * *'
 
 jobs:
   run-tasks:
@@ -14,7 +11,6 @@ jobs:
 
     steps:
       - name: 1. Checkout repository
-        # 这步会把你仓库里所有的文件（包括代码、json、xlsx）都拉取到虚拟机
         uses: actions/checkout@v4
 
       - name: 2. Set up Python 3.10
@@ -30,24 +26,31 @@ jobs:
       - name: 4. Install Playwright browsers
         run: playwright install chromium
 
-      - name: 5. Create config.json from Secret
-        # 我们仍然使用 Secret 来管理 config.json，因为里面的密钥最敏感
+      # ====================================================================
+      # ===== 新增的关键步骤在这里 =====
+      # ====================================================================
+      - name: 5. Install Chinese Fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+        
+      - name: 6. Create config.json from Secret
         env:
           CONFIG_JSON_CONTENT: ${{ secrets.CONFIG_JSON }}
         run: |
           echo "$CONFIG_JSON_CONTENT" > config.json
           echo "config.json created successfully."
 
-      - name: 6. Run the Python script
+      - name: 7. Run the Python script
         env:
-          DEBUG: "pw:api" # 激活 Playwright 的详细 API 日志
+          LIFE_PARTNER_COOKIE: ${{ secrets.LIFE_PARTNER_COOKIE }}
         run: python chouyong_cli.py
 
-      - name: 7. Upload logs and debug artifacts
-        if: always() # 无论成功或失败，都上传产物
+      - name: 8. Upload logs and debug artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: execution-artifacts # 产物包的名称
+          name: execution-artifacts
           path: |
             logs/
             debug_artifacts/
