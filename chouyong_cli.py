@@ -1,4 +1,4 @@
-# 文件名: chouyong_cli.py (最终稳定版 - Stealth + Cookie Secret)
+# 文件名: chouyong_cli.py (最终生产稳定版)
 
 import logging
 import json
@@ -19,7 +19,7 @@ try:
     import requests
     import lark_oapi as lark
     from lark_oapi.api.bitable.v1 import *
-    from playwright_stealth import stealth_async # 导入潜行插件
+    from playwright_stealth import stealth_async # 保留潜行插件，增强稳定性
 except ImportError as e:
     missing_lib = e.name
     print(f"致命错误: 缺少 '{missing_lib}' 库。请运行 'pip install -r requirements.txt' 后重试。")
@@ -27,7 +27,7 @@ except ImportError as e:
 
 CONFIG_FILE = "config.json"
 LOG_DIR = "logs"
-DEBUG_DIR = "debug_artifacts"
+DEBUG_DIR = "debug_artifacts" # 保留，用于存放失败时的截图
 
 for d in [LOG_DIR, DEBUG_DIR]:
     if not os.path.exists(d):
@@ -60,6 +60,7 @@ class CliRunner:
 
     # ==============================================================================
     # 第2步: 飞书 | 同步商品ID (所有相关函数)
+    # 这部分逻辑已稳定，保持不变
     # ==============================================================================
 
     def _get_douyin_client_token(self, douyin_configs):
@@ -315,12 +316,15 @@ class CliRunner:
                     logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次重试，刷新页面...")
                     await page.reload(wait_until="domcontentloaded", timeout=60000)
                 
+                # 等待页面稳定标志
                 await page.locator(".okee-lp-Table-Header").wait_for(state="visible", timeout=60000)
 
+                # 使用更稳定的链式操作
                 input_field = page.get_by_role("textbox", name="商品名称/ID")
                 await input_field.fill("", timeout=15000)
                 await input_field.fill(str(product_id), timeout=15000)
 
+                # 点击并等待关键网络请求
                 async with page.expect_response(lambda response: "/api/life/service/mall/merchant/commission/product/list" in response.url, timeout=60000) as response_info:
                     await page.get_by_test_id("查询").click(force=True, timeout=15000)
                 
@@ -328,6 +332,7 @@ class CliRunner:
                 if not response.ok:
                     raise Exception(f"API request failed with status {response.status}")
 
+                # 更精确地定位结果行和其中的元素
                 result_row = page.locator(f".okee-lp-Table-Row:has-text('{str(product_id)}')").first
                 await result_row.wait_for(state="visible", timeout=30000)
                 
@@ -394,7 +399,7 @@ class CliRunner:
                 logging.info("正在从环境变量加载Cookie...")
                 cookie_str = os.getenv("LIFE_PARTNER_COOKIE")
                 if not cookie_str:
-                    raise Exception("未能从Secret 'LIFE_PARTNER_COOKIE' 中获取Cookie。请在仓库的Settings->Secrets and variables->Actions中设置它。")
+                    raise Exception("未能从Secret 'LIFE_PARTNER_COOKIE' 中获取Cookie。请在仓库的Settings->Secrets中设置它。")
 
                 cookies = []
                 domain = ".life-partner.cn"
@@ -453,8 +458,8 @@ class CliRunner:
 async def main():
     runner = CliRunner()
     
-    # 按顺序执行任务，你可以按需注释掉不想跑的任务
-    # await runner.task_sync_feishu_ids()
+    # 按顺序执行任务，你可以根据需要注释掉不想运行的步骤
+    await runner.task_sync_feishu_ids()
     await runner.task_get_commission()
     
     logging.info("所有任务执行完毕。")
