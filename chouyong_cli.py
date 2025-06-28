@@ -1,4 +1,4 @@
-# 文件名: chouyong_cli.py (最终生产稳定版)
+# 文件名: chouyong_cli.py (最终生产稳定版 - 移除Stealth)
 
 import logging
 import json
@@ -19,7 +19,7 @@ try:
     import requests
     import lark_oapi as lark
     from lark_oapi.api.bitable.v1 import *
-    from playwright_stealth import stealth_async # 保留潜行插件，增强稳定性
+    # 已移除 playwright_stealth 的导入
 except ImportError as e:
     missing_lib = e.name
     print(f"致命错误: 缺少 '{missing_lib}' 库。请运行 'pip install -r requirements.txt' 后重试。")
@@ -27,7 +27,7 @@ except ImportError as e:
 
 CONFIG_FILE = "config.json"
 LOG_DIR = "logs"
-DEBUG_DIR = "debug_artifacts" # 保留，用于存放失败时的截图
+DEBUG_DIR = "debug_artifacts"
 
 for d in [LOG_DIR, DEBUG_DIR]:
     if not os.path.exists(d):
@@ -60,7 +60,6 @@ class CliRunner:
 
     # ==============================================================================
     # 第2步: 飞书 | 同步商品ID (所有相关函数)
-    # 这部分逻辑已稳定，保持不变
     # ==============================================================================
 
     def _get_douyin_client_token(self, douyin_configs):
@@ -316,15 +315,12 @@ class CliRunner:
                     logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次重试，刷新页面...")
                     await page.reload(wait_until="domcontentloaded", timeout=60000)
                 
-                # 等待页面稳定标志
                 await page.locator(".okee-lp-Table-Header").wait_for(state="visible", timeout=60000)
 
-                # 使用更稳定的链式操作
                 input_field = page.get_by_role("textbox", name="商品名称/ID")
                 await input_field.fill("", timeout=15000)
                 await input_field.fill(str(product_id), timeout=15000)
 
-                # 点击并等待关键网络请求
                 async with page.expect_response(lambda response: "/api/life/service/mall/merchant/commission/product/list" in response.url, timeout=60000) as response_info:
                     await page.get_by_test_id("查询").click(force=True, timeout=15000)
                 
@@ -332,7 +328,6 @@ class CliRunner:
                 if not response.ok:
                     raise Exception(f"API request failed with status {response.status}")
 
-                # 更精确地定位结果行和其中的元素
                 result_row = page.locator(f".okee-lp-Table-Row:has-text('{str(product_id)}')").first
                 await result_row.wait_for(state="visible", timeout=30000)
                 
@@ -375,7 +370,7 @@ class CliRunner:
     
     async def task_get_commission(self):
         logging.info("=====================================================")
-        logging.info("========== 开始执行步骤3: 查询并回写佣金 (潜行稳定模式) ==========")
+        logging.info("========== 开始执行步骤3: 查询并回写佣金 (稳定模式) ==========")
         logging.info("=====================================================")
         
         if not self._init_feishu_client(): return
@@ -413,9 +408,7 @@ class CliRunner:
                 logging.info("成功将Cookie注入浏览器。")
                 
                 page = await context.new_page()
-                await stealth_async(page)
-                logging.info("已为页面启用Stealth（潜行）模式。")
-
+                
                 logging.info("验证登录状态...")
                 await page.goto("https://www.life-partner.cn/data-center", timeout=60000)
                 await expect(page.get_by_text("数据看板")).to_be_visible(timeout=30000)
