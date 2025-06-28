@@ -1,4 +1,4 @@
-# 文件名: chouyong_cli.py (最终正确版 - 修正元素定位)
+# 文件名: chouyong_cli.py (最终正确版 - 等待正确的行动信号)
 
 import logging
 import json
@@ -61,12 +61,11 @@ class CliRunner:
     # ==============================================================================
     # 所有辅助函数
     # ==============================================================================
-
     def _init_feishu_client(self):
         app_id = self.configs.get("feishu_app_id")
         app_secret = self.configs.get("feishu_app_secret")
         if not app_id or not app_secret:
-            logging.error("飞书配置错误: 请在 config.json 或 GitHub Secrets 中提供 feishu_app_id 和 feishu_app_secret。")
+            logging.error("飞书配置错误。")
             return False
         logging.info("正在初始化飞书客户端...")
         self.feishu_client = lark.Client.builder().app_id(app_id).app_secret(app_secret).log_level(lark.LogLevel.WARNING).build()
@@ -128,21 +127,25 @@ class CliRunner:
                     logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次重试，刷新页面...")
                     await page.reload(wait_until="domcontentloaded", timeout=60000)
                 
-                await page.locator(".okee-lp-Table-Header").wait_for(state="visible", timeout=60000)
+                # --- 最终核心修改：等待正确的“行动信号” ---
+                # 不再等待不一定出现的数据表格，而是等待我们能操作的查询按钮
+                logging.info("    等待'查询'按钮加载...")
+                query_button = page.get_by_test_id("查询")
+                await query_button.wait_for(state="visible", timeout=30000)
+                logging.info("    '查询'按钮已加载，准备操作。")
 
-                # --- 核心修改：使用更可靠的占位符定位器 ---
+                # 使用占位符定位输入框，因为它最直接
                 input_field = page.get_by_placeholder("请输入")
-                await expect(input_field).to_be_visible(timeout=15000) # 确认输入框可见
-                
-                await input_field.fill(str(product_id))
+                await input_field.fill(str(product_id), timeout=15000)
 
                 async with page.expect_response(lambda response: "/api/life/service/mall/merchant/commission/product/list" in response.url, timeout=60000) as response_info:
-                    await page.get_by_test_id("查询").click(force=True)
+                    await query_button.click(force=True)
                 
                 response = await response_info.value
                 if not response.ok:
                     raise Exception(f"API request failed with status {response.status}")
 
+                # 后续逻辑保持不变，因为操作成功后，这部分是正确的
                 result_row = page.locator(f".okee-lp-Table-Row:has-text('{str(product_id)}')").first
                 await result_row.wait_for(state="visible", timeout=30000)
                 
@@ -194,11 +197,8 @@ class CliRunner:
         
         try:
             tasks_to_process = await self._get_empty_commission_records_from_feishu()
-            if tasks_to_process is None:
-                logging.error("从飞书获取待处理记录失败，任务中止。")
-                return
             if not tasks_to_process:
-                logging.info("未在飞书中找到需要处理的记录。")
+                logging.info("未找到待处理记录，任务结束。")
                 return
                 
             logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条待处理记录。")
@@ -219,8 +219,7 @@ class CliRunner:
                 logging.info(f"导航到目标页面: {base_url}")
                 await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
                 
-                logging.info("页面加载完成，给予5秒稳定时间...")
-                await page.wait_for_timeout(5000)
+                logging.info("页面导航完成，开始处理任务...")
                 
                 total_tasks = len(tasks_to_process)
                 for i, task in enumerate(tasks_to_process):
