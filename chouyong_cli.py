@@ -318,7 +318,7 @@ class CliRunner:
                 await input_field.fill(str(product_id))
                 await page.get_by_test_id("查询").click()
                 id_in_result_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first.get_by_text(str(product_id), exact=True)
-                await expect(id_in_result_locator).to_be_visible(timeout=60000)
+                await expect(id_in_result_locator).to_be_visible(timeout=30000)
                 commission_status_locator = page.locator(".okee-lp-Table-Cell > .lp-flex > .okee-lp-tag").first
                 await expect(commission_status_locator).to_be_visible(timeout=15000)
                 status_text = (await commission_status_locator.text_content() or "").strip()
