@@ -1,4 +1,4 @@
-# 文件名: chouyong_cli.py (最终正确版 - 等待正确的行动信号)
+# 文件名: chouyong_cli.py (最终正确版 - 回归您的原始逻辑)
 
 import logging
 import json
@@ -46,7 +46,6 @@ logging.basicConfig(
 class CliRunner:
     def __init__(self):
         self.configs = self.load_configs()
-        self.douyin_access_token = None
         self.feishu_client = None
 
     def load_configs(self):
@@ -59,7 +58,7 @@ class CliRunner:
             sys.exit(1)
 
     # ==============================================================================
-    # 所有辅助函数
+    # 辅助函数
     # ==============================================================================
     def _init_feishu_client(self):
         app_id = self.configs.get("feishu_app_id")
@@ -119,76 +118,61 @@ class CliRunner:
         except Exception as e:
             logging.error(f"更新飞书记录 {record_id} 时发生异常: {e}", exc_info=True)
             return False
-            
+
+    # ==============================================================================
+    # 严格遵循您提供的成功逻辑
+    # ==============================================================================
     async def _process_id_on_page(self, page, product_id, max_retries, retry_delay):
         for attempt in range(max_retries + 1):
             try:
                 if attempt > 0:
-                    logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次重试，刷新页面...")
-                    await page.reload(wait_until="domcontentloaded", timeout=60000)
+                    logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次尝试...")
                 
-                # --- 最终核心修改：等待正确的“行动信号” ---
-                # 不再等待不一定出现的数据表格，而是等待我们能操作的查询按钮
-                logging.info("    等待'查询'按钮加载...")
-                query_button = page.get_by_test_id("查询")
-                await query_button.wait_for(state="visible", timeout=30000)
-                logging.info("    '查询'按钮已加载，准备操作。")
-
-                # 使用占位符定位输入框，因为它最直接
-                input_field = page.get_by_placeholder("请输入")
-                await input_field.fill(str(product_id), timeout=15000)
-
-                async with page.expect_response(lambda response: "/api/life/service/mall/merchant/commission/product/list" in response.url, timeout=60000) as response_info:
-                    await query_button.click(force=True)
+                # 严格按照您的逻辑：定位输入框
+                input_field = page.get_by_role("textbox", name="商品名称/ID")
+                await expect(input_field).to_be_visible(timeout=20000)
+                await input_field.clear()
+                await input_field.fill(str(product_id))
                 
-                response = await response_info.value
-                if not response.ok:
-                    raise Exception(f"API request failed with status {response.status}")
-
-                # 后续逻辑保持不变，因为操作成功后，这部分是正确的
-                result_row = page.locator(f".okee-lp-Table-Row:has-text('{str(product_id)}')").first
-                await result_row.wait_for(state="visible", timeout=30000)
+                # 点击查询
+                await page.get_by_test_id("查询").click()
                 
-                commission_status_locator = result_row.locator(".okee-lp-tag")
-                await expect(commission_status_locator).to_be_visible(timeout=10000)
+                # 等待结果出现
+                id_in_result_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first.get_by_text(str(product_id), exact=True)
+                await expect(id_in_result_locator).to_be_visible(timeout=30000)
+                
+                # 获取佣金状态和信息
+                commission_status_locator = page.locator(".okee-lp-Table-Cell > .lp-flex > .okee-lp-tag").first
+                await expect(commission_status_locator).to_be_visible(timeout=15000)
                 
                 status_text = (await commission_status_locator.text_content() or "").strip()
                 status_result = "已设置" if status_text == "已设置" else f"未设置 ({status_text})"
                 commission_info = "未找到"
-
+                
                 if status_result == "已设置":
-                    channel_info_locator = result_row.locator("div:has-text('%')")
-                    try:
-                       await expect(channel_info_locator).to_be_visible(timeout=5000)
-                       commission_info = (await channel_info_locator.text_content() or "").strip().replace('"', '')
-                    except Exception:
-                       logging.warning(f"    ! [ID: {product_id}] 状态为'已设置'但未找到佣金渠道文本。")
-                       commission_info = "已设置但无详细比例"
-
-                return status_result, commission_info
+                    channel_info_locator = page.locator("div.lp-flex.lp-items-center:has-text('%')").first
+                    if await channel_info_locator.is_visible(timeout=5000):
+                        commission_info = (await channel_info_locator.text_content() or "").strip().replace('"', '')
+                        
+                return status_result, commission_info # 成功后直接返回
 
             except Exception as e:
-                error_msg_line = str(e).splitlines()[0]
-                logging.warning(f"    ! [ID: {product_id}] 在第 {attempt + 1} 次尝试中发生错误: {error_msg_line}")
-                try:
-                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    screenshot_path = os.path.join(DEBUG_DIR, f"error_screenshot_{product_id}_attempt{attempt+1}_{timestamp}.png")
-                    await page.screenshot(path=screenshot_path, full_page=True)
-                    logging.info(f"      截图已保存至: {screenshot_path}")
-                except Exception as screenshot_error:
-                    logging.error(f"      尝试保存错误截图失败: {screenshot_error}")
-
-                if attempt >= max_retries:
-                    logging.error(f"    !! [ID: {product_id}] 所有重试均失败。")
-                    return "查询失败", f"多次重试失败: {error_msg_line}"
-                else:
+                error_msg = str(e).splitlines()[0]
+                logging.warning(f"    ! [ID: {product_id}] 第 {attempt + 1} 次尝试失败: {error_msg}")
+                if attempt < max_retries:
+                    logging.info(f"    将在 {retry_delay} 秒后重试...")
                     await asyncio.sleep(retry_delay)
-        
-        return "查询失败", "未知错误"
+                else:
+                    logging.error(f"    !! [ID: {product_id}] 所有重试均失败。")
+                    try:
+                        screenshot_path = os.path.join(DEBUG_DIR, f"error_screenshot_{product_id}_final_attempt.png")
+                        await page.screenshot(path=screenshot_path, full_page=True)
+                        logging.info(f"      最终失败截图已保存至: {screenshot_path}")
+                    except Exception as screenshot_error:
+                        logging.error(f"      尝试保存最终失败截图失败: {screenshot_error}")
+                    return "查询失败", error_msg
 
-    # ==============================================================================
-    # 主任务流程
-    # ==============================================================================
+        return "查询失败", "未知错误"
 
     async def task_get_commission(self):
         logging.info("启动查询并回写佣金任务...")
@@ -200,7 +184,6 @@ class CliRunner:
             if not tasks_to_process:
                 logging.info("未找到待处理记录，任务结束。")
                 return
-                
             logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条待处理记录。")
 
             async with async_playwright() as p:
@@ -219,7 +202,8 @@ class CliRunner:
                 logging.info(f"导航到目标页面: {base_url}")
                 await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
                 
-                logging.info("页面导航完成，开始处理任务...")
+                logging.info("页面导航完成，给予5秒稳定时间...")
+                await page.wait_for_timeout(5000)
                 
                 total_tasks = len(tasks_to_process)
                 for i, task in enumerate(tasks_to_process):
@@ -237,7 +221,6 @@ class CliRunner:
                         logging.info(f"  -> ID {product_id} 未查询到佣金 ({status})，跳过回写。")
                 
                 await browser.close()
-
         except Exception as e:
             logging.error(f"任务主流程发生错误: {e}", exc_info=True)
         finally:
