@@ -1,5 +1,5 @@
 # 工作流的名称，会显示在GitHub Actions页面
-name: 抖音林客自动化任务
+name: linkezidonghua
 
 on:
   # 允许您在GitHub Actions页面手动触发此工作流
