@@ -25,10 +25,7 @@ jobs:
 
       - name: 4. Install Playwright browsers
         run: playwright install chromium
-
-      # ====================================================================
-      # ===== 新增的关键步骤在这里 =====
-      # ====================================================================
+      
       - name: 5. Install Chinese Fonts
         run: |
           sudo apt-get update
@@ -42,8 +39,7 @@ jobs:
           echo "config.json created successfully."
 
       - name: 7. Run the Python script
-        env:
-          LIFE_PARTNER_COOKIE: ${{ secrets.LIFE_PARTNER_COOKIE }}
+        # 已移除不再需要的 env 环境变量
         run: python chouyong_cli.py
 
       - name: 8. Upload logs and debug artifacts
