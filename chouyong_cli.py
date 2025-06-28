@@ -1,4 +1,4 @@
-# 文件名: chouyong_cli.py (最终正确版 - 回归您的原始逻辑)
+# 文件名: chouyong_cli.py (最终正确版 - 修正API调用错误)
 
 import logging
 import json
@@ -118,9 +118,9 @@ class CliRunner:
         except Exception as e:
             logging.error(f"更新飞书记录 {record_id} 时发生异常: {e}", exc_info=True)
             return False
-
+            
     # ==============================================================================
-    # 严格遵循您提供的成功逻辑
+    # 严格遵循您提供的成功逻辑，并修正API调用错误
     # ==============================================================================
     async def _process_id_on_page(self, page, product_id, max_retries, retry_delay):
         for attempt in range(max_retries + 1):
@@ -128,20 +128,16 @@ class CliRunner:
                 if attempt > 0:
                     logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次尝试...")
                 
-                # 严格按照您的逻辑：定位输入框
                 input_field = page.get_by_role("textbox", name="商品名称/ID")
                 await expect(input_field).to_be_visible(timeout=20000)
                 await input_field.clear()
                 await input_field.fill(str(product_id))
                 
-                # 点击查询
                 await page.get_by_test_id("查询").click()
                 
-                # 等待结果出现
                 id_in_result_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first.get_by_text(str(product_id), exact=True)
                 await expect(id_in_result_locator).to_be_visible(timeout=30000)
                 
-                # 获取佣金状态和信息
                 commission_status_locator = page.locator(".okee-lp-Table-Cell > .lp-flex > .okee-lp-tag").first
                 await expect(commission_status_locator).to_be_visible(timeout=15000)
                 
@@ -151,10 +147,18 @@ class CliRunner:
                 
                 if status_result == "已设置":
                     channel_info_locator = page.locator("div.lp-flex.lp-items-center:has-text('%')").first
-                    if await channel_info_locator.is_visible(timeout=5000):
+                    
+                    # --- 核心修正：使用正确的API进行等待 ---
+                    try:
+                        # expect().to_be_visible() 是正确的带超时的等待方法
+                        await expect(channel_info_locator).to_be_visible(timeout=5000)
                         commission_info = (await channel_info_locator.text_content() or "").strip().replace('"', '')
+                    except Exception:
+                        # 如果5秒内找不到，说明没有这个元素，是正常情况
+                        logging.warning(f"    ! [ID: {product_id}] 状态为'已设置'但未找到佣金比例详情。")
+                        commission_info = "已设置但无详细比例"
                         
-                return status_result, commission_info # 成功后直接返回
+                return status_result, commission_info
 
             except Exception as e:
                 error_msg = str(e).splitlines()[0]
