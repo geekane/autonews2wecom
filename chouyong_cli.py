@@ -251,8 +251,8 @@ class CliRunner:
             try:
                 if attempt > 0:
                     logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次重试，刷新页面...")
-                    await page.reload(wait_until="domcontentloaded", timeout=60000)
-                await page.locator(".okee-lp-Table-Header").wait_for(state="visible", timeout=60000)
+                    await page.reload(wait_until="domcontentloaded", timeout=20000)
+                await page.locator(".okee-lp-Table-Header").wait_for(state="visible", timeout=20000)
                 input_field = page.get_by_role("textbox", name="商品名称/ID")
                 await input_field.fill("", timeout=15000)
                 await input_field.fill(str(product_id), timeout=15000)
