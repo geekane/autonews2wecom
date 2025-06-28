@@ -1,4 +1,4 @@
-name: Run Commission Tasks
+name: Run linkechouyong Tasks
 
 on:
   # 允许你手动在 GitHub Actions 页面点击 "Run workflow" 来触发
@@ -39,12 +39,15 @@ jobs:
           echo "config.json created successfully."
 
       - name: 6. Run the Python script
-        # 脚本会自动在当前目录找到 林客.json 和 门店ID.xlsx
+        env:
+          DEBUG: "pw:api" # 激活 Playwright 的详细 API 日志
         run: python chouyong_cli.py
 
-      - name: 7. Upload logs as artifact
-        if: always() # 无论成功或失败，都上传日志
+      - name: 7. Upload logs and debug artifacts
+        if: always() # 无论成功或失败，都上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: execution-logs
-          path: logs/
+          name: execution-artifacts # 产物包的名称
+          path: |
+            logs/
+            debug_artifacts/
