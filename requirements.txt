@@ -3,4 +3,3 @@ playwright
 pandas
 requests
 lark-oapi
-playwright-stealth
