@@ -9,7 +9,7 @@ import asyncio
 import traceback
 import sys
 import re
-import concurrent.futures # 确保导入
+import concurrent.futures
 
 # 尝试导入必要的库
 try:
@@ -28,8 +28,12 @@ except ImportError as e:
 CONFIG_FILE = "config.json"
 COOKIE_FILE = "林客.json"
 LOG_DIR = "logs"
+DEBUG_DIR = "debug_artifacts"
+
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
+if not os.path.exists(DEBUG_DIR):
+    os.makedirs(DEBUG_DIR)
 
 # --- 日志设置 ---
 log_filename = os.path.join(LOG_DIR, f"run_log_{datetime.date.today().strftime('%Y-%m-%d')}.log")
@@ -166,7 +170,6 @@ class CliRunner:
             return {"success": False, "message": f"未知错误: {e}"}
             
     def _get_all_existing_product_ids_from_feishu(self):
-        """从飞书分页查询并获取指定表格中已存在的所有商品ID。"""
         field_name = self.configs['feishu_field_name']
         logging.info(f"开始从飞书获取已存在的商品ID，目标列: '{field_name}'...")
         existing_ids = set()
@@ -311,37 +314,63 @@ class CliRunner:
     async def _process_id_on_page(self, page, product_id, max_retries, retry_delay):
         for attempt in range(max_retries + 1):
             try:
-                if attempt > 0: logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次尝试...")
+                if attempt > 0:
+                    logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次重试，刷新页面...")
+                    await page.reload(wait_until="domcontentloaded", timeout=60000)
+                    await page.wait_for_timeout(2000)
+
                 input_field = page.get_by_role("textbox", name="商品名称/ID")
-                await expect(input_field).to_be_visible(timeout=20000)
+                await expect(input_field).to_be_visible(timeout=45000)
                 await input_field.clear()
                 await input_field.fill(str(product_id))
-                await page.get_by_test_id("查询").click()
+
+                async with page.expect_response(lambda response: "/api/life/service/mall/merchant/commission/product/list" in response.url, timeout=45000) as response_info:
+                    await page.get_by_test_id("查询").click()
+                
+                response = await response_info.value
+                if not response.ok:
+                    raise Exception(f"API request failed with status {response.status}")
+
                 id_in_result_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first.get_by_text(str(product_id), exact=True)
-                await expect(id_in_result_locator).to_be_visible(timeout=30000)
+                await expect(id_in_result_locator).to_be_visible(timeout=15000)
+                
                 commission_status_locator = page.locator(".okee-lp-Table-Cell > .lp-flex > .okee-lp-tag").first
-                await expect(commission_status_locator).to_be_visible(timeout=15000)
+                await expect(commission_status_locator).to_be_visible(timeout=10000)
+                
                 status_text = (await commission_status_locator.text_content() or "").strip()
                 status_result = "已设置" if status_text == "已设置" else f"未设置 ({status_text})"
                 commission_info = "未找到"
+
                 if status_result == "已设置":
                     channel_info_locator = page.locator("div.lp-flex.lp-items-center:has-text('%')").first
                     if await channel_info_locator.is_visible(timeout=5000):
                         commission_info = (await channel_info_locator.text_content() or "").strip().replace('"', '')
+                
                 return status_result, commission_info
+
             except Exception as e:
+                error_msg_line = str(e).splitlines()[0]
+                logging.warning(f"    ! [ID: {product_id}] 在第 {attempt + 1} 次尝试中发生错误: {error_msg_line}")
+
+                try:
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    screenshot_path = os.path.join(DEBUG_DIR, f"error_screenshot_{product_id}_attempt{attempt+1}_{timestamp}.png")
+                    await page.screenshot(path=screenshot_path, full_page=True)
+                    logging.info(f"      截图已保存至: {screenshot_path}")
+                except Exception as screenshot_error:
+                    logging.error(f"      尝试保存错误截图失败: {screenshot_error}")
+
                 if attempt < max_retries:
-                    logging.warning(f"    ! [ID: {product_id}] 查询超时 (尝试 {attempt + 1})。")
                     await asyncio.sleep(retry_delay)
                 else:
-                    logging.error(f"    !! [ID: {product_id}] 所有重试失败。")
-                    error_msg = str(e).splitlines()[0]
-                    return "查询超时", f"超时: {error_msg}"
+                    logging.error(f"    !! [ID: {product_id}] 所有重试均失败。")
+                    return "查询失败", f"多次重试失败: {error_msg_line}"
+        
         return "查询失败", "未知错误"
 
     async def async_get_commission_worker(self, tasks_to_process):
         max_pages = self.configs.get("max_concurrent_pages", 5)
-        headless = self.configs.get("headless_get", True) # 在Actions中强制无头
+        headless = self.configs.get("headless_get", True)
         max_retries = self.configs.get("max_retries", 3)
         retry_delay = self.configs.get("retry_delay", 2)
         base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId={self.configs['douyin_account_id']}&orderId=7494097018429261839&queryScene=0&skuOrderId=1829003050957856&tabName=ChargeSetting"
@@ -355,42 +384,53 @@ class CliRunner:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=headless)
             context = await browser.new_context(storage_state=COOKIE_FILE)
+            
+            logging.info("启动Playwright Trace记录...")
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            trace_path = os.path.join(DEBUG_DIR, f"trace_{timestamp}.zip")
+            await context.tracing.start(screenshots=True, snapshots=True, sources=True)
+
             processed_count = 0
             
-            async def worker(worker_id):
-                nonlocal processed_count
-                logging.info(f"[工 {worker_id}] 已启动...")
-                page = await context.new_page()
-                try:
-                    await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
-                    logging.info(f"[工作者 {worker_id}] 页面加载完成。")
-                    await page.wait_for_timeout(3000)
-                    while not task_queue.empty():
-                        task = await task_queue.get()
-                        product_id, record_id = task["id"], task["record_id"]
-                        logging.info(f"[工作者 {worker_id}] 处理 ID: {product_id} (飞书记录: {record_id})")
-                        status, commission_info = await self._process_id_on_page(page, product_id, max_retries, retry_delay)
-                        if status == "已设置":
-                            logging.info(f"  -> ID {product_id} 查询到佣金: {commission_info}，回写飞书...")
-                            success = await self._update_feishu_record(record_id, commission_info)
-                            if success: logging.info(f"  ✔ 回写记录 {record_id} 成功。")
-                            else: logging.error(f"  ❌ 回写记录 {record_id} 失败。")
-                        else:
-                            logging.info(f"  -> ID {product_id} 未查询到佣金，跳过回写。")
-                        processed_count += 1
-                        logging.info(f"-> [进度 {processed_count}/{total_tasks_count}]")
-                        task_queue.task_done()
-                except Exception as e_page_setup:
-                    logging.error(f"!!! [工作者 {worker_id}] 失败: {e_page_setup}", exc_info=True)
-                finally:
-                    logging.info(f"[工作者 {worker_id}] 关闭页面...")
-                    await page.close()
+            try:
+                async def worker(worker_id):
+                    nonlocal processed_count
+                    logging.info(f"[工 {worker_id}] 已启动...")
+                    page = await context.new_page()
+                    try:
+                        await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
+                        logging.info(f"[工作者 {worker_id}] 页面加载完成。")
+                        await page.wait_for_timeout(3000)
+                        while not task_queue.empty():
+                            task = await task_queue.get()
+                            product_id, record_id = task["id"], task["record_id"]
+                            logging.info(f"[工作者 {worker_id}] 处理 ID: {product_id} (飞书记录: {record_id})")
+                            status, commission_info = await self._process_id_on_page(page, product_id, max_retries, retry_delay)
+                            if status == "已设置":
+                                logging.info(f"  -> ID {product_id} 查询到佣金: {commission_info}，回写飞书...")
+                                success = await self._update_feishu_record(record_id, commission_info)
+                                if success: logging.info(f"  ✔ 回写记录 {record_id} 成功。")
+                                else: logging.error(f"  ❌ 回写记录 {record_id} 失败。")
+                            else:
+                                logging.info(f"  -> ID {product_id} 未查询到佣金 ({status})，跳过回写。")
+                            processed_count += 1
+                            logging.info(f"-> [进度 {processed_count}/{total_tasks_count}]")
+                            task_queue.task_done()
+                    except Exception as e_page_setup:
+                        logging.error(f"!!! [工作者 {worker_id}] 失败: {e_page_setup}", exc_info=True)
+                    finally:
+                        logging.info(f"[工作者 {worker_id}] 关闭页面...")
+                        await page.close()
 
-            workers = [asyncio.create_task(worker(i + 1)) for i in range(max_pages)]
-            await task_queue.join()
-            await asyncio.gather(*workers, return_exceptions=True)
-            await context.close()
-            await browser.close()
+                workers = [asyncio.create_task(worker(i + 1)) for i in range(max_pages)]
+                await task_queue.join()
+                await asyncio.gather(*workers, return_exceptions=True)
+            finally:
+                logging.info(f"停止Playwright Trace记录，结果保存至: {trace_path}")
+                await context.tracing.stop(path=trace_path)
+                await context.close()
+                await browser.close()
+
         logging.info("\n所有佣金查询及回写任务处理完成！")
 
     async def task_get_commission(self):
@@ -398,7 +438,7 @@ class CliRunner:
         logging.info("========== 开始执行步骤3: 查询并回写佣金 ==========")
         logging.info("=====================================================")
         if not os.path.exists(COOKIE_FILE):
-            logging.error(f"Cookie文件 '{COOKIE_FILE}' 未找到, 无法执行此任务。请先在本地生成并设置为GitHub Secret。")
+            logging.error(f"Cookie文件 '{COOKIE_FILE}' 未找到, 无法执行此任务。")
             return
         
         if not self._init_feishu_client():
@@ -434,5 +474,4 @@ async def main():
     logging.info("所有任务执行完毕。")
 
 if __name__ == "__main__":
-    # 这是正确的 CLI 入口点
     asyncio.run(main())
