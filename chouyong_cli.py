@@ -1,4 +1,4 @@
-# 文件名: chouyong_cli.py (最终正确版 - 从文件加载Cookie)
+# 文件名: chouyong_cli.py (最终正确版 - 确保截图)
 
 import logging
 import json
@@ -25,7 +25,7 @@ except ImportError as e:
     sys.exit(1)
 
 CONFIG_FILE = "config.json"
-COOKIE_FILE = "林客.json" # 定义Cookie文件名
+COOKIE_FILE = "林客.json"
 LOG_DIR = "logs"
 DEBUG_DIR = "debug_artifacts"
 
@@ -60,7 +60,6 @@ class CliRunner:
 
     # ==============================================================================
     # 第2步: 飞书 | 同步商品ID (所有相关函数)
-    # 这部分保持不变
     # ==============================================================================
 
     def _get_douyin_client_token(self, douyin_configs):
@@ -371,7 +370,7 @@ class CliRunner:
     
     async def task_get_commission(self):
         logging.info("=====================================================")
-        logging.info("========== 开始执行步骤3: 查询并回写佣金 (稳定模式) ==========")
+        logging.info("========== 开始执行步骤3: 查询并回写佣金 (文件登录模式) ==========")
         logging.info("=====================================================")
         
         if not self._init_feishu_client(): return
@@ -387,33 +386,37 @@ class CliRunner:
         logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条待处理记录。")
         
         browser = None
+        page = None # 在try块外部定义page
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 
-                # --- 核心修改：从文件加载登录状态 ---
                 logging.info(f"正在从文件 '{COOKIE_FILE}' 加载登录状态...")
                 if not os.path.exists(COOKIE_FILE):
-                    raise Exception(f"Cookie文件 '{COOKIE_FILE}' 未找到。请确保该文件与脚本在同一目录下。")
+                    raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。请确保该文件与脚本在同一目录下。")
                 
                 context = await browser.new_context(storage_state=COOKIE_FILE)
                 logging.info(f"成功从 '{COOKIE_FILE}' 加载登录状态。")
-                # --- 加载逻辑结束 ---
                 
                 page = await context.new_page()
                 
-                # 登录验证依然是一个好习惯
-                logging.info("验证登录状态...")
-                await page.goto("https://www.life-partner.cn/data-center", timeout=60000)
-                await expect(page.get_by_text("数据看板")).to_be_visible(timeout=30000)
-                logging.info("登录验证成功！")
+                logging.info("验证登录状态：导航到数据中心页面...")
+                await page.goto("https://www.life-partner.cn/data-center", timeout=60000, wait_until="domcontentloaded")
+                
+                # --- 核心修改：先截图，再验证 ---
+                logging.info("已导航到验证页面，立即进行截图以供分析...")
+                screenshot_path = os.path.join(DEBUG_DIR, "login_verification_page.png")
+                await page.screenshot(path=screenshot_path, full_page=True)
+                logging.info(f"登录验证页面的快照已保存至: {screenshot_path}")
 
-                # 导航到目标页面
+                logging.info("现在开始验证页面内容...")
+                await expect(page.get_by_text("数据看板")).to_be_visible(timeout=30000)
+                logging.info("登录验证成功！页面上已找到'数据看板'。")
+
                 base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId={self.configs['douyin_account_id']}&orderId=7494097018429261839&queryScene=0&skuOrderId=1829003050957856&tabName=ChargeSetting"
                 await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
                 logging.info("已成功导航到佣金设置页面。")
 
-                # 顺序处理所有任务
                 total_tasks = len(tasks_to_process)
                 for i, task in enumerate(tasks_to_process):
                     logging.info(f"--- [进度 {i+1}/{total_tasks}] 处理ID: {task['id']} ---")
@@ -427,12 +430,17 @@ class CliRunner:
                         logging.info(f"  -> 未查询到佣金 ({status})，跳过。")
         
         except Exception as e:
-            logging.error(f"步骤3主线程出错: {e}", exc_info=True)
-            if 'page' in locals() and not page.is_closed():
+            # 修改了这里的错误日志，使其更通用
+            logging.error(f"步骤3主线程执行期间发生错误: {e}", exc_info=True)
+            # 这里的截图逻辑现在作为备用，因为我们已经在流程中提前拍了一张
+            if page and not page.is_closed():
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                screenshot_path = os.path.join(DEBUG_DIR, f"main_task_error_{timestamp}.png")
-                await page.screenshot(path=screenshot_path, full_page=True)
-                logging.info(f"主任务错误截图已保存至: {screenshot_path}")
+                error_screenshot_path = os.path.join(DEBUG_DIR, f"main_task_error_{timestamp}.png")
+                try:
+                    await page.screenshot(path=error_screenshot_path, full_page=True)
+                    logging.info(f"捕获到主任务错误的截图已保存至: {error_screenshot_path}")
+                except Exception as screenshot_error:
+                    logging.error(f"尝试捕获主任务错误截图失败: {screenshot_error}")
 
         finally:
             if browser:
@@ -447,7 +455,6 @@ class CliRunner:
 async def main():
     runner = CliRunner()
     
-    # 按顺序执行任务，你可以根据需要注释掉不想运行的步骤
     await runner.task_sync_feishu_ids()
     await runner.task_get_commission()
     
