@@ -325,7 +325,7 @@ class CliRunner:
                 await input_field.fill(str(product_id))
 
                 async with page.expect_response(lambda response: "/api/life/service/mall/merchant/commission/product/list" in response.url, timeout=45000) as response_info:
-                    await page.get_by_test_id("查询").click()
+                    await page.get_by_test_id("查询").click(force=True)
                 
                 response = await response_info.value
                 if not response.ok:
