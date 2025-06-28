@@ -1,8 +1,8 @@
 name: Feishu Data Sync
 
 on:
-  schedule:
-    - cron: '30 2 * * *'  # 这表示每天 UTC 时间 2:30，即北京时间 10:30 运行
+  #schedule:
+  #  - cron: '30 2 * * *'  # 这表示每天 UTC 时间 2:30，即北京时间 10:30 运行
   workflow_dispatch:
 
 jobs:
