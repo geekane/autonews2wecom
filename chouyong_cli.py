@@ -700,6 +700,21 @@ class CliRunner:
                 page = await context.new_page()
                 await page.goto(target_url, timeout=60000, wait_until="networkidle")
                 logging.info("   ✔ [成功] 网站页面加载完成。")
+                
+            async def click_if_present(text: str, timeout: int = 3000):
+                try:
+                    locator = page.locator("div[id^='venus_poptip_']").get_by_text(text, exact=True).first
+                    await locator.wait_for(state="visible", timeout=timeout)
+                    await locator.click(force=True)
+                    await asyncio.sleep(1.5)
+                except Exception: pass
+            await click_if_present("我知道了")
+            await click_if_present("跳过")
+            try:
+                go_experience_locators = page.locator('div.venus-button:has-text("去体验")')
+                if await go_experience_locators.count() > 0:
+                    await go_experience_locators.last.dispatch_event('click')
+            except Exception: pass
 
                 logging.info("   - 开始执行数据导出...")
                 async with page.expect_download(timeout=30000) as download_info:
