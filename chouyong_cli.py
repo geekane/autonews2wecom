@@ -322,7 +322,6 @@ class CliRunner:
                 return
             if not tasks_to_process:
                 logging.info("未在飞书中找到“抽佣比例”为空的记录，无需设置。")
-                messagebox.showinfo("任务提示", "未在飞书中找到需要设置佣金的记录。")
                 return
 
             logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条需要设置佣金的记录。")
@@ -371,7 +370,6 @@ class CliRunner:
 
         except Exception as e:
             logging.error(f"设置佣金任务主线程发生严重错误: {e}", exc_info=True)
-            messagebox.showerror("严重错误", f"设置佣金任务发生严重错误: {e}")
         finally:
             self.set_ui_state(is_running=False)
             self.feishu_client = None
