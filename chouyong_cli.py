@@ -302,6 +302,176 @@ class CliRunner:
 
         return "查询失败", "未知错误"
 
+    #第4部分函数实现
+    async def task_set_commission(self):
+        """
+        从飞书获取“抽佣比例”为空的商品ID，并为它们批量设置佣金。
+        (此函数已从读取Excel改为读取飞书，并增加了企业微信通知)
+        """
+        logging.info("启动从飞书获取任务并设置佣金的任务...")
+        # 1. 初始化飞书客户端
+        if not self._init_feishu_client():
+            self.set_ui_state(False); return
+
+        try:
+            # 2. 从飞书获取“抽佣比例”为空的记录
+            tasks_to_process = await self._get_empty_commission_records_from_feishu()
+            
+            if tasks_to_process is None:
+                messagebox.showerror("飞书错误", "从飞书获取待处理记录失败，请检查日志。")
+                return
+            if not tasks_to_process:
+                logging.info("未在飞书中找到“抽佣比例”为空的记录，无需设置。")
+                messagebox.showinfo("任务提示", "未在飞书中找到需要设置佣金的记录。")
+                return
+
+            logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条需要设置佣金的记录。")
+
+            successful_sets = 0
+            failed_sets = 0
+
+            # 3. 启动Playwright浏览器，执行设置操作
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=self.configs.get("headless_set", True))
+                context = await browser.new_context(storage_state=COOKIE_FILE)
+                page = await context.new_page()
+                
+                base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId={self.configs['douyin_account_id']}&orderId=7494097018429261839&queryScene=0&skuOrderId=1829003050957856&tabName=ChargeSetting"
+                await page.goto(base_url, timeout=90000, wait_until="domcontentloaded")
+                
+                # 4. 遍历从飞书获取的任务
+                for i, task in enumerate(tasks_to_process):
+                    pid = task["id"]
+                    logging.info(f"--- [{i+1}/{len(tasks_to_process)}] 开始处理商品ID: {pid} ---")
+                    
+                    commission_values = {
+                        '线上经营': self.configs.get('commission_online', '0'),
+                        '线下扫码': self.configs.get('commission_offline', '0'),
+                        '增量宝': self.configs.get('commission_zengliang', '0'),
+                        '职人账号': self.configs.get('commission_zhiren', '0')
+                    }
+                    
+                    success = await self._set_single_commission(page, pid, commission_values)
+                    
+                    if success:
+                        successful_sets += 1
+                    else:
+                        failed_sets += 1
+                
+                await browser.close()
+            
+            # --- 【核心修改】在这里发送企业微信通知 ---
+            if successful_sets > 0:
+                # 因为requests是同步库，在异步函数中调用它需要使用to_thread
+                # 以免阻塞事件循环
+                await asyncio.to_thread(self._send_wechat_notification, successful_sets)
+            
+            logging.info(f"\n所有佣金设置任务处理完成！成功: {successful_sets}, 失败: {failed_sets}")
+            messagebox.showinfo("任务完成", f"所有佣金设置任务处理完成！\n\n成功: {successful_sets}\n失败: {failed_sets}")
+
+        except Exception as e:
+            logging.error(f"设置佣金任务主线程发生严重错误: {e}", exc_info=True)
+            messagebox.showerror("严重错误", f"设置佣金任务发生严重错误: {e}")
+        finally:
+            self.set_ui_state(is_running=False)
+            self.feishu_client = None
+
+    async def _set_single_commission(self, page, product_id, commission_values):
+        """
+        此函数严格参考您的原始代码，仅对导致错误的“设置佣金”按钮定位做最小化修正。
+        其他所有定位逻辑，特别是输入框的定位，保持原样。
+        """
+        try:
+            logging.info(f"  - 步骤1: 搜索 {product_id}...")
+            # --- 保持原样 ---
+            input_field = page.get_by_role("textbox", name="商品名称/ID")
+            await expect(input_field).to_be_visible(timeout=20000)
+            await input_field.clear(); await input_field.fill(str(product_id))
+            await page.get_by_test_id("查询").click()
+
+            # --- 唯一的、必要的修正 ---
+            # 您的日志显示 page.get_by_role("button", name="设置佣金") 找到了46个元素。
+            # 这是因为搜索结果可能是个列表。我们需要确保点击的是列表第一行的那一个。
+            # 这是解决 "strict mode violation" 错误的唯一方法。
+            first_row_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first
+            set_commission_button = first_row_locator.get_by_role("button", name="设置佣金")
+            # --- 修正结束 ---
+
+            await expect(set_commission_button).to_be_visible(timeout=15000)
+            
+            logging.info("  - 步骤2: 打开弹窗...")
+            await set_commission_button.click()
+            
+            # --- 保持原样 ---
+            popup_title = page.get_by_text("设置佣金比例", exact=True)
+            await expect(popup_title).to_be_visible(timeout=10000)
+            
+            logging.info("  - 步骤3: 填写佣金...")
+            # --- 严格遵循您提供的输入框定位逻辑，保持原样 ---
+            for label, value in commission_values.items():
+                regex_pattern = re.compile(f"^{label}%$")
+                input_locator = page.locator("div").filter(has_text=regex_pattern).get_by_placeholder("请输入")
+                await expect(input_locator).to_be_visible(timeout=5000)
+                await input_locator.fill(str(value))
+                logging.info(f"    - '{label}' 已设置为 '{value}%'")
+            
+            logging.info("  - 步骤4: 提交...")
+            # --- 保持原样 ---
+            submit_button = page.get_by_role("button", name="提交审核")
+            await submit_button.click()
+            await expect(popup_title).to_be_hidden(timeout=15000)
+            
+            logging.info(f"  ✔ [成功] ID: {product_id} 设置成功。")
+            return True
+        
+        except Exception as e:
+            # --- 保持原样 ---
+            error_msg = str(e).split('\n')[0]
+            logging.error(f"  ❌ [失败] 为ID {product_id} 设置佣金时出错: {error_msg}", exc_info=False)
+            try:
+                screenshot_path = os.path.join(LOG_DIR, f"error_set_commission_{product_id}_{int(time.time())}.png")
+                await page.screenshot(path=screenshot_path)
+                logging.info(f"  - 错误截图已保存至: {screenshot_path}")
+            except Exception as screenshot_error:
+                logging.error(f"  - 尝试保存错误截图失败: {screenshot_error}")
+            return False
+
+
+    def _send_wechat_notification(self, count):
+        """发送企业微信机器人通知。"""
+        webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=0e364220-efc0-4e7b-b505-129ea3371053"
+        message = f"目前有【{count}】件商品需要确认抽佣，请通过app端进行确认操作"
+        
+        payload = {
+            "msgtype": "text",
+            "text": {
+                "content": message,
+                "mentioned_list": ["@all"]
+            }
+        }
+        headers = {"Content-Type": "application/json"}
+        
+        logging.info("正在发送企业微信通知...")
+        try:
+            # 使用 requests 库发送 POST 请求
+            response = requests.post(webhook_url, headers=headers, data=json.dumps(payload), timeout=15)
+            # 检查HTTP响应状态码
+            response.raise_for_status()
+            response_json = response.json()
+            
+            # 检查企业微信返回的业务状态码
+            if response_json.get("errcode") == 0:
+                logging.info("企业微信通知发送成功。")
+            else:
+                error_msg = response_json.get("errmsg", "未知错误")
+                logging.error(f"企业微信通知发送失败: {error_msg}")
+                
+        except requests.exceptions.RequestException as e:
+            logging.error(f"发送企业微信通知时发生网络错误: {e}")
+        except Exception as e:
+            logging.error(f"发送企业微信通知时发生未知异常: {e}", exc_info=True)
+        
+
     # ==============================================================================
     # 主任务流程
     # ==============================================================================
