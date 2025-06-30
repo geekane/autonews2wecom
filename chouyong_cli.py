@@ -598,8 +598,14 @@ class CliRunner:
 async def main():
     runner = CliRunner()
     
+    # 步骤1：同步所有商品ID到飞书
     await runner.task_sync_feishu_ids()
+    
+    # 步骤2：为“抽佣比例”为空的记录，查询并回填已有的佣金信息
     await runner.task_get_commission()
+
+    # 【新增】步骤3：再次检查“抽佣比例”为空的记录，并为它们设置新的佣金
+    await runner.task_set_commission()
     
     logging.info("\n所有任务执行完毕。")
 
