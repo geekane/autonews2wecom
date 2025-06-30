@@ -2,7 +2,7 @@ import logging
 import json
 import os
 import time
-from datetime import datetime
+from datetime import datetime, date
 import asyncio
 import traceback
 import sys
@@ -35,7 +35,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(LOG_DIR, f"run_log_{datetime.date.today().strftime('%Y-%m-%d')}.log"), mode='a', encoding='utf-8'),
+        logging.FileHandler(os.path.join(LOG_DIR, f"run_log_{date.today().strftime('%Y-%m-%d')}.log"), mode='a', encoding='utf-8'),
         logging.StreamHandler(sys.stdout)
     ]
 )
