@@ -711,14 +711,10 @@ class CliRunner:
                         await locator.click(force=True)
                         await asyncio.sleep(1.5) # 等待弹窗动画消失
                     except Exception:
-                        # 没找到弹窗是正常情况，静默处理
                         pass
-                
                 logging.info("   - 开始检查并关闭引导弹窗...")
                 await click_if_present("我知道了")
                 await click_if_present("跳过")
-                
-                # 单独处理 "去体验" 按钮，它可能结构不同
                 try:
                     go_experience_locators = page.locator('div.venus-button:has-text("去体验")')
                     if await go_experience_locators.count() > 0:
@@ -726,8 +722,7 @@ class CliRunner:
                         await go_experience_locators.last.dispatch_event('click')
                 except Exception:
                     pass
-                # --- 修正结束 ---
-
+                    
                 logging.info("   - 开始执行数据导出...")
                 async with page.expect_download(timeout=30000) as download_info:
                     await page.get_by_role("button", name="导出数据").click()
