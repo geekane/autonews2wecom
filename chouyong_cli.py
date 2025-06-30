@@ -665,13 +665,12 @@ class CliRunner:
     async def task_sync_life_data(self):
         """
         步骤0：登录 life-data.cn，导出数据，并将其同步到指定的飞书表格。
-        (此版本已加入处理新手引导弹窗的逻辑)
+        (此版本已增强日志和调试截图)
         """
         logging.info("==========================================================")
         logging.info("========== 开始执行步骤0: 同步 Life-Data.cn 数据 ==========")
         logging.info("==========================================================")
         
-        # --- 硬编码的配置 ---
         feishu_config = {
             "app_id": "cli_a6672cae343ad00e",
             "app_secret": "0J4SpfBMeIxJEOXDJMNbofMipRgwkMpV",
@@ -687,42 +686,59 @@ class CliRunner:
 
         try:
             async with async_playwright() as p:
-                logging.info("   - 正在启动浏览器 (Chromium)...")
                 browser = await p.chromium.launch(headless=True)
                 context = await browser.new_context(accept_downloads=True)
-
-                logging.info(f"   - 正在从 {cookie_file_for_life_data} 加载 Cookies...")
                 if not os.path.exists(cookie_file_for_life_data):
                     raise FileNotFoundError(f"Cookie 文件 '{cookie_file_for_life_data}' 未找到。")
-                await context.storage_state(path=cookie_file_for_life_data)
                 
+                #【增强】使用 context.storage_state() 加载cookie，更可靠
+                with open(cookie_file_for_life_data, 'r', encoding='utf-8') as f:
+                    storage_state = json.load(f)
+                await context.add_cookies(storage_state['cookies'])
+                logging.info(f"   - 正在从 {cookie_file_for_life_data} 加载 Cookies...")
+
                 page = await context.new_page()
                 await page.goto(target_url, timeout=60000, wait_until="networkidle")
                 logging.info("   ✔ [成功] 网站页面加载完成。")
 
-                # --- 【核心修正】处理新手引导和弹窗 ---
-                # 将辅助函数定义在任务内部，保持代码整洁
+                # --- 【核心修正】增强弹窗处理的日志和调试 ---
                 async def click_if_present(text: str, timeout: int = 3000):
+                    logging.info(f"   - 正在检查是否存在 '{text}' 按钮...")
                     try:
-                        # 使用更通用的定位器来找到弹窗内的按钮
-                        locator = page.locator("div[id^='venus_poptip_']").get_by_text(text, exact=True).first
+                        locator = page.locator("div[role='dialog'], div[id^='venus_poptip_']").get_by_text(text, exact=True).first
                         await locator.wait_for(state="visible", timeout=timeout)
-                        logging.info(f"   - 检测到并准备点击弹窗按钮: '{text}'...")
+                        logging.info(f"   ✔ [检测成功] 发现可见的 '{text}' 按钮，准备点击。")
                         await locator.click(force=True)
-                        await asyncio.sleep(1.5) # 等待弹窗动画消失
+                        logging.info(f"   ✔ [点击成功] 已点击 '{text}' 按钮。")
+                        await asyncio.sleep(1.5)
                     except Exception:
-                        pass
-                logging.info("   - 开始检查并关闭引导弹窗...")
+                        logging.info(f"   - [未检测到] 未在 {timeout}ms 内发现 '{text}' 按钮，跳过。")
+                
+                logging.info("--- 开始检查并关闭引导弹窗 ---")
                 await click_if_present("我知道了")
                 await click_if_present("跳过")
+                
                 try:
+                    logging.info("   - 正在检查是否存在 '去体验' 按钮...")
                     go_experience_locators = page.locator('div.venus-button:has-text("去体验")')
                     if await go_experience_locators.count() > 0:
-                        logging.info("   - 检测到并准备点击 '去体验' 按钮...")
+                        logging.info("   ✔ [检测成功] 发现 '去体验' 按钮，准备点击。")
                         await go_experience_locators.last.dispatch_event('click')
-                except Exception:
-                    pass
-                    
+                        logging.info("   ✔ [点击成功] 已点击 '去体验' 按钮。")
+                    else:
+                        logging.info("   - [未检测到] 未发现 '去体验' 按钮。")
+                except Exception as e:
+                    logging.warning(f"   - 点击 '去体验' 按钮时出现非致命错误: {e}")
+                
+                logging.info("--- 弹窗检查完毕，强制等待3秒以确保页面稳定 ---")
+                await page.wait_for_timeout(3000)
+
+                # 【增强】在点击“导出数据”之前，先截一张图，用于诊断问题
+                screenshot_path_before_export = os.path.join(DEBUG_DIR, f"debug_before_export_click_{datetime.now().strftime('%H%M%S')}.png")
+                await page.screenshot(path=screenshot_path_before_export, full_page=True)
+                logging.info(f"   - [调试截图] 已保存点击“导出数据”前的页面截图至: {screenshot_path_before_export}")
+                # --- 修正结束 ---
+
                 logging.info("   - 开始执行数据导出...")
                 async with page.expect_download(timeout=30000) as download_info:
                     await page.get_by_role("button", name="导出数据").click()
@@ -738,6 +754,14 @@ class CliRunner:
                 await browser.close()
         except Exception as e:
             logging.error(f"❌ [致命错误] 浏览器或下载阶段发生错误: {traceback.format_exc()}")
+            # 增加失败时的截图
+            if 'page' in locals() and not page.is_closed():
+                try:
+                    fail_screenshot_path = os.path.join(DEBUG_DIR, f"fatal_error_screenshot_{datetime.now().strftime('%H%M%S')}.png")
+                    await page.screenshot(path=fail_screenshot_path, full_page=True)
+                    logging.info(f"   - [失败截图] 已保存发生致命错误时的页面截图至: {fail_screenshot_path}")
+                except Exception as screenshot_err:
+                    logging.error(f"   - 尝试保存失败截图时再次发生错误: {screenshot_err}")
             return
 
         # --- 飞书同步逻辑 (保持不变) ---
