@@ -585,19 +585,168 @@ class CliRunner:
             self.feishu_client = None
             logging.info("\n步骤2执行完毕。")
 
+    # ==============================================================================
+    # 【新增】步骤0的函数：从life-data.cn同步数据到飞书
+    # ==============================================================================
+
+    async def _fs_list_all_record_ids(self, app_token: str, table_id: str):
+        """辅助函数：获取指定表格中的所有记录ID (用于清空)"""
+        logging.info(f"   - 开始获取 Table ID: {table_id} 中的所有记录...")
+        record_ids = []
+        page_token = None
+        try:
+            while True:
+                builder = ListAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).page_size(500)
+                if page_token:
+                    builder.page_token(page_token)
+                request = builder.build()
+                response = self.feishu_client.bitable.v1.app_table_record.list(request)
+                if not response.success():
+                    logging.error(f"❌ [飞书错误] 获取记录列表失败: Code={response.code}, Msg='{response.msg}'")
+                    return None
+                if response.data and response.data.items:
+                    record_ids.extend([item.record_id for item in response.data.items])
+                if response.data and response.data.has_more:
+                    page_token = response.data.page_token
+                else:
+                    break
+            logging.info(f"   ✔ [成功] 共获取到 {len(record_ids)} 条现有记录。")
+            return record_ids
+        except Exception as e:
+            logging.error(f"❌ [飞书错误] 获取记录列表时发生异常: {traceback.format_exc()}")
+            return None
+
+    async def _fs_batch_delete_records(self, app_token: str, table_id: str, record_ids: list):
+        """辅助函数：批量删除记录"""
+        if not record_ids:
+            logging.info("   - [信息] 没有需要删除的记录，跳过删除步骤。")
+            return True
+        logging.info(f"   - 准备删除 {len(record_ids)} 条旧记录...")
+        try:
+            for i in range(0, len(record_ids), 500):
+                batch = record_ids[i:i + 500]
+                req = BatchDeleteAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).request_body(
+                    BatchDeleteAppTableRecordRequestBody.builder().records(batch).build()).build()
+                response = self.feishu_client.bitable.v1.app_table_record.batch_delete(req)
+                if not response.success():
+                    logging.error(f"❌ [飞书错误] 删除记录失败: Code={response.code}, Msg='{response.msg}'")
+                    return False
+            logging.info(f"   ✔ [成功] 所有 {len(record_ids)} 条旧记录已全部删除。")
+            return True
+        except Exception as e:
+            logging.error(f"❌ [飞书错误] 删除记录时发生异常: {traceback.format_exc()}")
+            return False
+
+    async def _fs_batch_add_records(self, app_token: str, table_id: str, dataframe: pd.DataFrame):
+        """辅助函数：批量添加新记录"""
+        logging.info(f"   - 准备向 Table ID: {table_id} 批量写入 {len(dataframe)} 条新记录...")
+        try:
+            # 分批处理，每批最多500条
+            for i in range(0, len(dataframe), 500):
+                df_batch = dataframe.iloc[i:i+500]
+                records_to_add = [AppTableRecord.builder().fields(
+                    {col: str(val) if pd.notna(val) else "" for col, val in row.to_dict().items()}
+                ).build() for _, row in df_batch.iterrows()]
+                
+                req = BatchCreateAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).request_body(
+                    BatchCreateAppTableRecordRequestBody.builder().records(records_to_add).build()).build()
+                response = self.feishu_client.bitable.v1.app_table_record.batch_create(req)
+                
+                if not response.success():
+                    logging.error(f"❌ [飞书错误] 写入记录失败: Code={response.code}, Msg='{response.msg}'")
+                    return False
+                logging.info(f"   - 成功写入批次 {i//500 + 1} ({len(response.data.records)} 条记录)。")
+            logging.info(f"   ✔ [成功] 所有 {len(dataframe)} 条新记录已成功写入。")
+            return True
+        except Exception as e:
+            logging.error(f"❌ [飞书错误] 写入记录时发生异常: {traceback.format_exc()}")
+            return False
+
+    async def task_sync_life_data(self):
+        """
+        步骤0：登录 life-data.cn，导出数据，并将其同步到指定的飞书表格。
+        该过程会先清空目标表格，再写入新数据。
+        """
+        logging.info("==========================================================")
+        logging.info("========== 开始执行步骤0: 同步 Life-Data.cn 数据 ==========")
+        logging.info("==========================================================")
+        
+        # --- 硬编码的配置 ---
+        feishu_config = {
+            "app_id": "cli_a6672cae343ad00e",
+            "app_secret": "0J4SpfBMeIxJEOXDJMNbofMipRgwkMpV",
+            "app_token": "MslRbdwPca7P6qsqbqgcvpBGnRh",
+            "table_id": "tbluVbrXLRUmfouv"
+        }
+        cookie_file_for_life_data = '来客.json' # 注意：这个任务使用的cookie文件名
+        target_url = "https://www.life-data.cn/store/my/chain/list?groupid=1768205901316096"
+        download_dir = "downloads"
+        
+        # --- 浏览器自动化逻辑 ---
+        downloaded_df = None
+        if not self._init_feishu_client(): return
+
+        try:
+            async with async_playwright() as p:
+                logging.info("   - 正在启动浏览器 (Chromium)...")
+                browser = await p.chromium.launch(headless=True) # 强制无头模式
+                context = await browser.new_context(accept_downloads=True)
+
+                logging.info(f"   - 正在从 {cookie_file_for_life_data} 加载 Cookies...")
+                if not os.path.exists(cookie_file_for_life_data):
+                    raise FileNotFoundError(f"Cookie 文件 '{cookie_file_for_life_data}' 未找到。")
+                await context.storage_state(path=cookie_file_for_life_data)
+                
+                page = await context.new_page()
+                await page.goto(target_url, timeout=60000, wait_until="networkidle")
+                logging.info("   ✔ [成功] 网站页面加载完成。")
+
+                logging.info("   - 开始执行数据导出...")
+                async with page.expect_download(timeout=30000) as download_info:
+                    await page.get_by_role("button", name="导出数据").click()
+                
+                download = await download_info.value
+                os.makedirs(download_dir, exist_ok=True)
+                save_path = os.path.join(download_dir, f"临时数据_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+                await download.save_as(save_path)
+                logging.info(f"   ✔ [成功] 文件已下载到: {save_path}")
+                
+                downloaded_df = pd.read_excel(save_path, engine='openpyxl')
+                logging.info(f"   ✔ [成功] Excel 文件读取成功，共 {len(downloaded_df)} 条记录。")
+                await browser.close()
+        except Exception as e:
+            logging.error(f"❌ [致命错误] 浏览器或下载阶段发生错误: {traceback.format_exc()}")
+            return # 发生错误则中止任务
+
+        # --- 飞书同步逻辑 ---
+        if downloaded_df is not None and not downloaded_df.empty:
+            logging.info("\n--- 开始同步数据至飞书 ---")
+            existing_ids = await self._fs_list_all_record_ids(feishu_config['app_token'], feishu_config['table_id'])
+            if existing_ids is not None:
+                delete_ok = await self._fs_batch_delete_records(feishu_config['app_token'], feishu_config['table_id'], existing_ids)
+                if delete_ok:
+                    await self._fs_batch_add_records(feishu_config['app_token'], feishu_config['table_id'], downloaded_df)
+        else:
+            logging.warning("   - 未获取到有效数据，已跳过飞书同步步骤。")
+            
+        logging.info("\n步骤0执行完毕。")
+
 # ==============================================================================
 # 程序主入口
 # ==============================================================================
 async def main():
     runner = CliRunner()
     
-    # 步骤1：同步所有商品ID到飞书
+    # 【新增】步骤0：从 life-data.cn 同步源数据到飞书
+    await runner.task_sync_life_data()
+    
+    # 步骤1：从抖音POI同步商品ID到飞书（抽佣主表）
     await runner.task_sync_feishu_ids()
     
     # 步骤2：为“抽佣比例”为空的记录，查询并回填已有的佣金信息
     await runner.task_get_commission()
 
-    # 【新增】步骤3：再次检查“抽佣比例”为空的记录，并为它们设置新的佣金
+    # 步骤3：再次检查“抽佣比例”为空的记录，并为它们设置新的佣金
     await runner.task_set_commission()
     
     logging.info("\n所有任务执行完毕。")
