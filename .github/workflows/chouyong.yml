@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     # 每天北京时间 11:00（即 UTC 时间 3:00）
-    - cron: '0 3 * * *'
+    - cron: '0 2 * * *'
 
 jobs:
   run-tasks:
