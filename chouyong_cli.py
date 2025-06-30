@@ -332,7 +332,7 @@ class CliRunner:
 
             # 3. 启动Playwright浏览器，执行设置操作
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=self.configs.get("headless_set", True))
+                browser = await p.chromium.launch(headless=True)
                 context = await browser.new_context(storage_state=COOKIE_FILE)
                 page = await context.new_page()
                 
@@ -388,11 +388,6 @@ class CliRunner:
             await expect(input_field).to_be_visible(timeout=20000)
             await input_field.clear(); await input_field.fill(str(product_id))
             await page.get_by_test_id("查询").click()
-
-            # --- 唯一的、必要的修正 ---
-            # 您的日志显示 page.get_by_role("button", name="设置佣金") 找到了46个元素。
-            # 这是因为搜索结果可能是个列表。我们需要确保点击的是列表第一行的那一个。
-            # 这是解决 "strict mode violation" 错误的唯一方法。
             first_row_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first
             set_commission_button = first_row_locator.get_by_role("button", name="设置佣金")
             # --- 修正结束 ---
