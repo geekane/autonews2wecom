@@ -705,7 +705,7 @@ class CliRunner:
                 async def click_if_present(text: str, timeout: int = 3000):
                     try:
                         # 使用更通用的定位器来找到弹窗内的按钮
-                        locator = page.locator("div[role='dialog'], div[id^='venus_poptip_']").get_by_text(text, exact=True).first
+                        locator = page.locator("div[id^='venus_poptip_']").get_by_text(text, exact=True).first
                         await locator.wait_for(state="visible", timeout=timeout)
                         logging.info(f"   - 检测到并准备点击弹窗按钮: '{text}'...")
                         await locator.click(force=True)
