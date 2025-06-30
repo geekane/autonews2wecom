@@ -3,7 +3,7 @@ name: 林客商品自动化抽佣查询
 on:
   workflow_dispatch:
   schedule:
-    # 每天北京时间 11:00（即 UTC 时间 3:00）
+    # 每天北京时间 10:00（即 UTC 时间 2:00）
     - cron: '0 2 * * *'
 
 jobs:
