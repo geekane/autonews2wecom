@@ -1,4 +1,4 @@
-name: Run Commission Tasks
+name: 林客商品自动化抽佣查询
 
 on:
   workflow_dispatch:
