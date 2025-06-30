@@ -665,7 +665,7 @@ class CliRunner:
     async def task_sync_life_data(self):
         """
         步骤0：登录 life-data.cn，导出数据，并将其同步到指定的飞书表格。
-        该过程会先清空目标表格，再写入新数据。
+        (此版本已加入处理新手引导弹窗的逻辑)
         """
         logging.info("==========================================================")
         logging.info("========== 开始执行步骤0: 同步 Life-Data.cn 数据 ==========")
@@ -678,18 +678,17 @@ class CliRunner:
             "app_token": "MslRbdwPca7P6qsqbqgcvpBGnRh",
             "table_id": "tbluVbrXLRUmfouv"
         }
-        cookie_file_for_life_data = '来客.json' # 注意：这个任务使用的cookie文件名
+        cookie_file_for_life_data = '来客.json'
         target_url = "https://www.life-data.cn/store/my/chain/list?groupid=1768205901316096"
         download_dir = "downloads"
         
-        # --- 浏览器自动化逻辑 ---
         downloaded_df = None
         if not self._init_feishu_client(): return
 
         try:
             async with async_playwright() as p:
                 logging.info("   - 正在启动浏览器 (Chromium)...")
-                browser = await p.chromium.launch(headless=True) # 强制无头模式
+                browser = await p.chromium.launch(headless=True)
                 context = await browser.new_context(accept_downloads=True)
 
                 logging.info(f"   - 正在从 {cookie_file_for_life_data} 加载 Cookies...")
@@ -700,21 +699,34 @@ class CliRunner:
                 page = await context.new_page()
                 await page.goto(target_url, timeout=60000, wait_until="networkidle")
                 logging.info("   ✔ [成功] 网站页面加载完成。")
+
+                # --- 【核心修正】处理新手引导和弹窗 ---
+                # 将辅助函数定义在任务内部，保持代码整洁
+                async def click_if_present(text: str, timeout: int = 3000):
+                    try:
+                        # 使用更通用的定位器来找到弹窗内的按钮
+                        locator = page.locator("div[role='dialog'], div[id^='venus_poptip_']").get_by_text(text, exact=True).first
+                        await locator.wait_for(state="visible", timeout=timeout)
+                        logging.info(f"   - 检测到并准备点击弹窗按钮: '{text}'...")
+                        await locator.click(force=True)
+                        await asyncio.sleep(1.5) # 等待弹窗动画消失
+                    except Exception:
+                        # 没找到弹窗是正常情况，静默处理
+                        pass
                 
-            async def click_if_present(text: str, timeout: int = 3000):
+                logging.info("   - 开始检查并关闭引导弹窗...")
+                await click_if_present("我知道了")
+                await click_if_present("跳过")
+                
+                # 单独处理 "去体验" 按钮，它可能结构不同
                 try:
-                    locator = page.locator("div[id^='venus_poptip_']").get_by_text(text, exact=True).first
-                    await locator.wait_for(state="visible", timeout=timeout)
-                    await locator.click(force=True)
-                    await asyncio.sleep(1.5)
-                except Exception: pass
-            await click_if_present("我知道了")
-            await click_if_present("跳过")
-            try:
-                go_experience_locators = page.locator('div.venus-button:has-text("去体验")')
-                if await go_experience_locators.count() > 0:
-                    await go_experience_locators.last.dispatch_event('click')
-            except Exception: pass
+                    go_experience_locators = page.locator('div.venus-button:has-text("去体验")')
+                    if await go_experience_locators.count() > 0:
+                        logging.info("   - 检测到并准备点击 '去体验' 按钮...")
+                        await go_experience_locators.last.dispatch_event('click')
+                except Exception:
+                    pass
+                # --- 修正结束 ---
 
                 logging.info("   - 开始执行数据导出...")
                 async with page.expect_download(timeout=30000) as download_info:
@@ -731,9 +743,9 @@ class CliRunner:
                 await browser.close()
         except Exception as e:
             logging.error(f"❌ [致命错误] 浏览器或下载阶段发生错误: {traceback.format_exc()}")
-            return # 发生错误则中止任务
+            return
 
-        # --- 飞书同步逻辑 ---
+        # --- 飞书同步逻辑 (保持不变) ---
         if downloaded_df is not None and not downloaded_df.empty:
             logging.info("\n--- 开始同步数据至飞书 ---")
             existing_ids = await self._fs_list_all_record_ids(feishu_config['app_token'], feishu_config['table_id'])
