@@ -554,7 +554,7 @@ class CliRunner:
                 
                 page = await context.new_page()
                 
-                base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId={self.configs['douyin_account_id']}&orderId=7494097018429261839&queryScene=0&skuOrderId=1829003050957856&tabName=ChargeSetting"
+                base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId=7241078611527075855&orderId=7521772903543900206&queryScene=0&skuOrderId=7521772903543916590&tabName=ChargeSetting"
                 logging.info(f"导航到目标页面: {base_url}")
                 await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
                 
