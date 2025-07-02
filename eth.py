@@ -186,7 +186,7 @@ def eth_report():
             logging.info(f"转换后的价格 (float): {price_float}")
 
             # 判断价格是否在预警范围内
-            if price_float < 2100 or price_float > 2500:
+            if price_float < 2100 or price_float > 2400:
                 logging.info(f"价格 {price_float} 触发提醒条件 (< 2100 or > 2500)。准备发送提醒。")
                 # 构造更详细的提醒消息
                 message = f"当前价格: {eth_price_str}，已触发预警！"
