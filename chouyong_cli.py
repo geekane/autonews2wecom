@@ -401,9 +401,9 @@ class CliRunner:
             logging.info("  - 步骤2: 打开弹窗...")
             await set_commission_button.click()
             
-            # 【健壮性改进】获取弹窗本身的定位器
-            dialog_locator = page.get_by_role("dialog", name="设置佣金比例")
-            await expect(dialog_locator).to_be_visible(timeout=10000)
+            # 获取弹窗本身的定位器
+            dialog_locator = page.get_by_text("设置佣金比例", exact=True)
+            await expect(popup_title).to_be_visible(timeout=10000)
             
             logging.info("  - 步骤3: 填写佣金...")
             for label, value in commission_values.items():
