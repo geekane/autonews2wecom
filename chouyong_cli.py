@@ -402,14 +402,14 @@ class CliRunner:
             await set_commission_button.click()
             
             # 获取弹窗本身的定位器
-            dialog_locator = page.get_by_text("设置佣金比例", exact=True)
+            popup_title = page.get_by_text("设置佣金比例", exact=True)
             await expect(popup_title).to_be_visible(timeout=10000)
             
             logging.info("  - 步骤3: 填写佣金...")
             for label, value in commission_values.items():
-                # 使用您提供的定位逻辑，但将搜索范围限定在弹窗内(dialog_locator)
+                # 使用您提供的定位逻辑，但将搜索范围限定在弹窗内(popup_title)
                 # 注意：您原来的正则 `f"^{label}%$"` 可能过于严格，这里放宽为只匹配标签文本
-                container = dialog_locator.locator("div.commission-item").filter(has_text=re.compile(f"^{label}"))
+                container = popup_title.locator("div.commission-item").filter(has_text=re.compile(f"^{label}"))
                 input_locator = container.get_by_placeholder("请输入")
 
                 await expect(input_locator).to_be_visible(timeout=5000)
@@ -418,9 +418,9 @@ class CliRunner:
             
             logging.info("  - 步骤4: 提交...")
             # 在弹窗内查找提交按钮
-            submit_button = dialog_locator.get_by_role("button", name="提交审核")
+            submit_button = popup_title.get_by_role("button", name="提交审核")
             await submit_button.click()
-            await expect(dialog_locator).to_be_hidden(timeout=15000)
+            await expect(popup_title).to_be_hidden(timeout=15000)
             
             logging.info(f"  ✔ [成功] ID: {product_id} 设置成功。")
             return True
