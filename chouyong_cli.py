@@ -416,7 +416,7 @@ class CliRunner:
             
             logging.info("  - 步骤4: 提交...")
             # 在弹窗内查找提交按钮
-            submit_button = popup_title.get_by_role("button", name="提交审核")
+            submit_button = page.get_by_role("button", name="提交审核")
             await submit_button.click()
             await expect(popup_title).to_be_hidden(timeout=15000)
             
