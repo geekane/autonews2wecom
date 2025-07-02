@@ -404,14 +404,12 @@ class CliRunner:
             # 获取弹窗本身的定位器
             popup_title = page.get_by_text("设置佣金比例", exact=True)
             await expect(popup_title).to_be_visible(timeout=10000)
-            
-            logging.info("  - 步骤3: 填写佣金...")
-            for label, value in commission_values.items():
-                # 使用您提供的定位逻辑，但将搜索范围限定在弹窗内(popup_title)
-                # 注意：您原来的正则 `f"^{label}%$"` 可能过于严格，这里放宽为只匹配标签文本
-                container = popup_title.locator("div.commission-item").filter(has_text=re.compile(f"^{label}"))
-                input_locator = container.get_by_placeholder("请输入")
 
+            logging.info("  - 步骤3: 填写佣金...")
+            # --- 严格遵循您提供的输入框定位逻辑，保持原样 ---
+            for label, value in commission_values.items():
+                regex_pattern = re.compile(f"^{label}%$")
+                input_locator = page.locator("div").filter(has_text=regex_pattern).get_by_placeholder("请输入")
                 await expect(input_locator).to_be_visible(timeout=5000)
                 await input_locator.fill(str(value))
                 logging.info(f"    - '{label}' 已设置为 '{value}%'")
