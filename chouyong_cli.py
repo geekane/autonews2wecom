@@ -381,55 +381,77 @@ class CliRunner:
                 self.feishu_client = None
             logging.info("\n步骤3执行完毕。")
 
-    async def _set_single_commission(self, page, product_id, commission_values):
-        """
-        在页面上为单个商品ID设置佣金。(此函数已适配命令行)
-        """
-        try:
-            logging.info(f"  - 步骤1: 搜索 {product_id}...")
-            input_field = page.get_by_role("textbox", name="商品名称/ID")
-            await expect(input_field).to_be_visible(timeout=20000)
-            await input_field.clear(); await input_field.fill(str(product_id))
-            await page.get_by_test_id("查询").click()
+# --- 请用下面的代码替换 chouyong_cli.py 文件中原来的 _set_single_commission 函数 ---
+async def _set_single_commission(self, page, product_id, commission_values):
+    """
+    在页面上为单个商品ID设置佣金。(此函数已适配命令行)
+    """
+    try:
+        logging.info(f"  - 步骤1: 搜索 {product_id}...")
+        input_field = page.get_by_role("textbox", name="商品名称/ID")
+        await expect(input_field).to_be_visible(timeout=20000)
+        await input_field.clear()
+        await input_field.fill(str(product_id))
+        await page.get_by_test_id("查询").click()
 
-            first_row_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first
-            set_commission_button = first_row_locator.get_by_role("button", name="设置佣金")
-            await expect(set_commission_button).to_be_visible(timeout=15000)
-            
-            logging.info("  - 步骤2: 打开弹窗...")
-            await set_commission_button.click()
-            
-            popup_title = page.get_by_text("设置佣金比例", exact=True)
-            await expect(popup_title).to_be_visible(timeout=10000)
-            
-            logging.info("  - 步骤3: 填写佣金...")
-            for label, value in commission_values.items():
-                regex_pattern = re.compile(f"^{label}")
-                container = page.locator("div.commission-item").filter(has_text=regex_pattern)
-                input_locator = container.get_by_placeholder("请输入")
-                await expect(input_locator).to_be_visible(timeout=5000)
-                await input_locator.fill(str(value))
-                logging.info(f"    - '{label}' 已设置为 '{value}%'")
-            
-            logging.info("  - 步骤4: 提交...")
-            submit_button = page.get_by_role("dialog").get_by_role("button", name="提交审核")
-            await submit_button.click()
-            await expect(popup_title).to_be_hidden(timeout=15000)
-            
-            logging.info(f"  ✔ [成功] ID: {product_id} 设置成功。")
-            return True
+        first_row_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first
+        set_commission_button = first_row_locator.get_by_role("button", name="设置佣金")
+        await expect(set_commission_button).to_be_visible(timeout=15000)
         
-        except Exception as e:
-            error_msg = str(e).split('\n')[0]
-            logging.error(f"  ❌ [失败] 为ID {product_id} 设置佣金时出错: {error_msg}", exc_info=False)
-            try:
-                screenshot_path = os.path.join(DEBUG_DIR, f"error_set_commission_{product_id}_{int(time.time())}.png")
-                await page.screenshot(path=screenshot_path)
-                logging.info(f"  - 错误截图已保存至: {screenshot_path}")
-            except Exception as screenshot_error:
-                logging.error(f"  - 尝试保存错误截图失败: {screenshot_error}")
-            return False
+        logging.info("  - 步骤2: 打开弹窗...")
+        await set_commission_button.click()
+        
+        # 【核心修正 1】: 获取弹窗本身的定位器，并将后续操作限定在此范围内
+        dialog_locator = page.get_by_role("dialog", name="设置佣金比例")
+        await expect(dialog_locator).to_be_visible(timeout=10000)
+        # 增加一个短暂的等待，以防弹窗内元素有加载动画
+        await page.wait_for_timeout(500)
 
+        logging.info("  - 步骤3: 填写佣金...")
+        for label, value in commission_values.items():
+            # 【核心修正 1】: 使用 dialog_locator 限定搜索范围
+            container = dialog_locator.locator("div.commission-item").filter(has_text=re.compile(f"^{label}"))
+            input_locator = container.get_by_placeholder("请输入")
+            await expect(input_locator).to_be_visible(timeout=5000)
+            await input_locator.fill(str(value))
+            logging.info(f"    - '{label}' 已设置为 '{value}%'")
+        
+        logging.info("  - 步骤4: 提交...")
+        # 同样使用弹窗定位器来查找提交按钮，更稳妥
+        submit_button = dialog_locator.get_by_role("button", name="提交审核")
+        await submit_button.click()
+        await expect(dialog_locator).to_be_hidden(timeout=15000)
+        
+        logging.info(f"  ✔ [成功] ID: {product_id} 设置成功。")
+        return True
+    
+    except Exception as e:
+        error_msg = str(e).split('\n')[0]
+        logging.error(f"  ❌ [失败] 为ID {product_id} 设置佣金时出错: {error_msg}", exc_info=False)
+        try:
+            screenshot_path = os.path.join(DEBUG_DIR, f"error_set_commission_{product_id}_{int(time.time())}.png")
+            await page.screenshot(path=screenshot_path)
+            logging.info(f"  - 错误截图已保存至: {screenshot_path}")
+        except Exception as screenshot_error:
+            logging.error(f"  - 尝试保存错误截图失败: {screenshot_error}")
+
+        # 【核心修正 2】: 增加错误处理，尝试关闭弹窗以恢复页面状态
+        try:
+            logging.info("  - 发生错误，尝试关闭弹窗以继续下一个任务...")
+            cancel_button = page.get_by_role("dialog").get_by_role("button", name="取消")
+            if await cancel_button.is_visible(timeout=2000):
+                await cancel_button.click()
+                await page.wait_for_timeout(500) # 等待关闭动画
+                logging.info("  - 弹窗已通过点击'取消'按钮关闭。")
+            else:
+                 # 如果取消按钮找不到，尝试按 'Escape' 键，这通常也能关闭弹窗
+                await page.keyboard.press("Escape")
+                await page.wait_for_timeout(500)
+                logging.info("  - 已尝试通过按 'Escape' 键关闭弹窗。")
+        except Exception as cleanup_error:
+            logging.error(f"  - 尝试关闭弹窗失败，后续任务可能受影响: {cleanup_error}")
+
+        return False
 
     def _send_wechat_notification(self, count):
         """发送企业微信机器人通知。"""
