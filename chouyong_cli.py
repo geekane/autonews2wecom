@@ -309,21 +309,16 @@ class CliRunner:
         logging.info("=====================================================")
         logging.info("========== 开始执行步骤3: 批量设置新佣金 ==========")
         logging.info("=====================================================")
-        # 1. 初始化飞书客户端
         if not self._init_feishu_client():
-            # 【修正】移除 set_ui_state
             return
 
         try:
-            # 2. 从飞书获取“抽佣比例”为空的记录
             tasks_to_process = await self._get_empty_commission_records_from_feishu()
             
             if tasks_to_process is None:
-                # 【修正】将 messagebox 替换为 logging
                 logging.error("飞书错误: 从飞书获取待处理记录失败，请检查日志。")
                 return
             if not tasks_to_process:
-                # 【修正】将 messagebox 替换为 logging
                 logging.info("任务提示: 未在飞书中找到需要设置佣金的记录。")
                 return
 
@@ -332,7 +327,6 @@ class CliRunner:
             successful_sets = 0
             failed_sets = 0
 
-            # 3. 启动Playwright浏览器，执行设置操作
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 
@@ -344,7 +338,6 @@ class CliRunner:
                 base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId=7241078611527075855&orderId=7521772903543900206&queryScene=0&skuOrderId=7521772903543916590&tabName=ChargeSetting"
                 await page.goto(base_url, timeout=90000, wait_until="domcontentloaded")
                 
-                # 4. 遍历从飞书获取的任务
                 for i, task in enumerate(tasks_to_process):
                     pid = task["id"]
                     logging.info(f"--- [进度 {i+1}/{len(tasks_to_process)}] 开始处理商品ID: {pid} ---")
@@ -365,93 +358,70 @@ class CliRunner:
                 
                 await browser.close()
             
-            # 发送企业微信通知
             if successful_sets > 0:
                 await asyncio.to_thread(self._send_wechat_notification, successful_sets)
             
-            # 【修正】将 messagebox 替换为 logging
             logging.info(f"\n所有佣金设置任务处理完成！成功: {successful_sets}, 失败: {failed_sets}")
 
         except Exception as e:
-            # 【修正】将 messagebox 替换为 logging
             logging.error(f"设置佣金任务主线程发生严重错误: {e}", exc_info=True)
         finally:
-            # 【修正】移除 set_ui_state
             if self.feishu_client:
                 self.feishu_client = None
             logging.info("\n步骤3执行完毕。")
 
-# --- 请用下面的代码替换 chouyong_cli.py 文件中原来的 _set_single_commission 函数 ---
-async def _set_single_commission(self, page, product_id, commission_values):
-    """
-    在页面上为单个商品ID设置佣金。(此函数已适配命令行)
-    """
-    try:
-        logging.info(f"  - 步骤1: 搜索 {product_id}...")
-        input_field = page.get_by_role("textbox", name="商品名称/ID")
-        await expect(input_field).to_be_visible(timeout=20000)
-        await input_field.clear()
-        await input_field.fill(str(product_id))
-        await page.get_by_test_id("查询").click()
-
-        first_row_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first
-        set_commission_button = first_row_locator.get_by_role("button", name="设置佣金")
-        await expect(set_commission_button).to_be_visible(timeout=15000)
-        
-        logging.info("  - 步骤2: 打开弹窗...")
-        await set_commission_button.click()
-        
-        # 【核心修正 1】: 获取弹窗本身的定位器，并将后续操作限定在此范围内
-        dialog_locator = page.get_by_role("dialog", name="设置佣金比例")
-        await expect(dialog_locator).to_be_visible(timeout=10000)
-        # 增加一个短暂的等待，以防弹窗内元素有加载动画
-        await page.wait_for_timeout(500)
-
-        logging.info("  - 步骤3: 填写佣金...")
-        for label, value in commission_values.items():
-            # 【核心修正 1】: 使用 dialog_locator 限定搜索范围
-            container = dialog_locator.locator("div.commission-item").filter(has_text=re.compile(f"^{label}"))
-            input_locator = container.get_by_placeholder("请输入")
-            await expect(input_locator).to_be_visible(timeout=5000)
-            await input_locator.fill(str(value))
-            logging.info(f"    - '{label}' 已设置为 '{value}%'")
-        
-        logging.info("  - 步骤4: 提交...")
-        # 同样使用弹窗定位器来查找提交按钮，更稳妥
-        submit_button = dialog_locator.get_by_role("button", name="提交审核")
-        await submit_button.click()
-        await expect(dialog_locator).to_be_hidden(timeout=15000)
-        
-        logging.info(f"  ✔ [成功] ID: {product_id} 设置成功。")
-        return True
-    
-    except Exception as e:
-        error_msg = str(e).split('\n')[0]
-        logging.error(f"  ❌ [失败] 为ID {product_id} 设置佣金时出错: {error_msg}", exc_info=False)
+    async def _set_single_commission(self, page, product_id, commission_values):
+        """
+        在页面上为单个商品ID设置佣金。(此函数已适配命令行)
+        """
         try:
-            screenshot_path = os.path.join(DEBUG_DIR, f"error_set_commission_{product_id}_{int(time.time())}.png")
-            await page.screenshot(path=screenshot_path)
-            logging.info(f"  - 错误截图已保存至: {screenshot_path}")
-        except Exception as screenshot_error:
-            logging.error(f"  - 尝试保存错误截图失败: {screenshot_error}")
+            logging.info(f"  - 步骤1: 搜索 {product_id}...")
+            input_field = page.get_by_role("textbox", name="商品名称/ID")
+            await expect(input_field).to_be_visible(timeout=20000)
+            await input_field.clear(); await input_field.fill(str(product_id))
+            await page.get_by_test_id("查询").click()
 
-        # 【核心修正 2】: 增加错误处理，尝试关闭弹窗以恢复页面状态
-        try:
-            logging.info("  - 发生错误，尝试关闭弹窗以继续下一个任务...")
-            cancel_button = page.get_by_role("dialog").get_by_role("button", name="取消")
-            if await cancel_button.is_visible(timeout=2000):
-                await cancel_button.click()
-                await page.wait_for_timeout(500) # 等待关闭动画
-                logging.info("  - 弹窗已通过点击'取消'按钮关闭。")
-            else:
-                 # 如果取消按钮找不到，尝试按 'Escape' 键，这通常也能关闭弹窗
-                await page.keyboard.press("Escape")
-                await page.wait_for_timeout(500)
-                logging.info("  - 已尝试通过按 'Escape' 键关闭弹窗。")
-        except Exception as cleanup_error:
-            logging.error(f"  - 尝试关闭弹窗失败，后续任务可能受影响: {cleanup_error}")
+            first_row_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first
+            set_commission_button = first_row_locator.get_by_role("button", name="设置佣金")
+            await expect(set_commission_button).to_be_visible(timeout=15000)
+            
+            logging.info("  - 步骤2: 打开弹窗...")
+            await set_commission_button.click()
+            
+            # 使用 get_by_role("dialog") 来更精确地定位弹窗
+            dialog_locator = page.get_by_role("dialog", name="设置佣金比例")
+            await expect(dialog_locator).to_be_visible(timeout=10000)
+            
+            logging.info("  - 步骤3: 填写佣金...")
+            for label, value in commission_values.items():
+                regex_pattern = re.compile(f"^{label}")
+                # 将搜索范围限定在弹窗内
+                container = dialog_locator.locator("div.commission-item").filter(has_text=regex_pattern)
+                input_locator = container.get_by_placeholder("请输入")
+                await expect(input_locator).to_be_visible(timeout=5000)
+                await input_locator.fill(str(value))
+                logging.info(f"    - '{label}' 已设置为 '{value}%'")
+            
+            logging.info("  - 步骤4: 提交...")
+            # 同样在弹窗内查找提交按钮
+            submit_button = dialog_locator.get_by_role("button", name="提交审核")
+            await submit_button.click()
+            await expect(dialog_locator).to_be_hidden(timeout=15000)
+            
+            logging.info(f"  ✔ [成功] ID: {product_id} 设置成功。")
+            return True
+        
+        except Exception as e:
+            error_msg = str(e).split('\n')[0]
+            logging.error(f"  ❌ [失败] 为ID {product_id} 设置佣金时出错: {error_msg}", exc_info=False)
+            try:
+                screenshot_path = os.path.join(DEBUG_DIR, f"error_set_commission_{product_id}_{int(time.time())}.png")
+                await page.screenshot(path=screenshot_path)
+                logging.info(f"  - 错误截图已保存至: {screenshot_path}")
+            except Exception as screenshot_error:
+                logging.error(f"  - 尝试保存错误截图失败: {screenshot_error}")
+            return False
 
-        return False
 
     def _send_wechat_notification(self, count):
         """发送企业微信机器人通知。"""
@@ -661,7 +631,6 @@ async def _set_single_commission(self, page, product_id, commission_values):
         """辅助函数：批量添加新记录"""
         logging.info(f"   - 准备向 Table ID: {table_id} 批量写入 {len(dataframe)} 条新记录...")
         try:
-            # 分批处理，每批最多500条
             for i in range(0, len(dataframe), 500):
                 df_batch = dataframe.iloc[i:i+500]
                 records_to_add = [AppTableRecord.builder().fields(
@@ -711,7 +680,6 @@ async def _set_single_commission(self, page, product_id, commission_values):
                 if not os.path.exists(cookie_file_for_life_data):
                     raise FileNotFoundError(f"Cookie 文件 '{cookie_file_for_life_data}' 未找到。")
                 
-                #【增强】使用 context.storage_state() 加载cookie，更可靠
                 with open(cookie_file_for_life_data, 'r', encoding='utf-8') as f:
                     storage_state = json.load(f)
                 await context.add_cookies(storage_state['cookies'])
@@ -721,7 +689,6 @@ async def _set_single_commission(self, page, product_id, commission_values):
                 await page.goto(target_url, timeout=60000, wait_until="networkidle")
                 logging.info("   ✔ [成功] 网站页面加载完成。")
 
-                # --- 【核心修正】增强弹窗处理的日志和调试 ---
                 async def click_if_present(text: str, timeout: int = 3000):
                     logging.info(f"   - 正在检查是否存在 '{text}' 按钮...")
                     try:
@@ -753,11 +720,9 @@ async def _set_single_commission(self, page, product_id, commission_values):
                 logging.info("--- 弹窗检查完毕，强制等待3秒以确保页面稳定 ---")
                 await page.wait_for_timeout(3000)
 
-                # 【增强】在点击“导出数据”之前，先截一张图，用于诊断问题
                 screenshot_path_before_export = os.path.join(DEBUG_DIR, f"debug_before_export_click_{datetime.now().strftime('%H%M%S')}.png")
                 await page.screenshot(path=screenshot_path_before_export, full_page=True)
                 logging.info(f"   - [调试截图] 已保存点击“导出数据”前的页面截图至: {screenshot_path_before_export}")
-                # --- 修正结束 ---
 
                 logging.info("   - 开始执行数据导出...")
                 async with page.expect_download(timeout=30000) as download_info:
@@ -774,7 +739,6 @@ async def _set_single_commission(self, page, product_id, commission_values):
                 await browser.close()
         except Exception as e:
             logging.error(f"❌ [致命错误] 浏览器或下载阶段发生错误: {traceback.format_exc()}")
-            # 增加失败时的截图
             if 'page' in locals() and not page.is_closed():
                 try:
                     fail_screenshot_path = os.path.join(DEBUG_DIR, f"fatal_error_screenshot_{datetime.now().strftime('%H%M%S')}.png")
@@ -784,7 +748,6 @@ async def _set_single_commission(self, page, product_id, commission_values):
                     logging.error(f"   - 尝试保存失败截图时再次发生错误: {screenshot_err}")
             return
 
-        # --- 飞书同步逻辑 (保持不变) ---
         if downloaded_df is not None and not downloaded_df.empty:
             logging.info("\n--- 开始同步数据至飞书 ---")
             existing_ids = await self._fs_list_all_record_ids(feishu_config['app_token'], feishu_config['table_id'])
@@ -803,16 +766,12 @@ async def _set_single_commission(self, page, product_id, commission_values):
 async def main():
     runner = CliRunner()
     
-    # 【新增】步骤0：从 life-data.cn 同步源数据到飞书
     await runner.task_sync_life_data()
     
-    # 步骤1：从抖音POI同步商品ID到飞书（抽佣主表）
     await runner.task_sync_feishu_ids()
     
-    # 步骤2：为“抽佣比例”为空的记录，查询并回填已有的佣金信息
     await runner.task_get_commission()
 
-    # 步骤3：再次检查“抽佣比例”为空的记录，并为它们设置新的佣金
     await runner.task_set_commission()
     
     logging.info("\n所有任务执行完毕。")
