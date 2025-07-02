@@ -2,6 +2,7 @@ import argparse
 import os
 import platform
 import requests
+import json  # 添加 json 模块导入
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options
@@ -173,12 +174,33 @@ def eth_report():
 
     logging.info(f"eth_report access_token: {access_token}")
     url = 'https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%81/%E4%BB%A5%E5%A4%AA%E5%9D%8A'
-    eth_price = fetch_eth_price(url)
-    logging.info(f"eth_report eth_price: {eth_price}")
+    eth_price_str = fetch_eth_price(url)
+    logging.info(f"获取到的原始价格字符串: {eth_price_str}")
 
-    if eth_price:
-        send_wechat_message(access_token, f"{eth_price}")
+    if eth_price_str:
+        try:
+            # 清理字符串，移除货币符号和千位分隔符，以便转换为浮点数
+            # 例如: "$2,345.67" -> "2345.67"
+            price_cleaned = ''.join(filter(lambda x: x in '0123456789.', eth_price_str))
+            price_float = float(price_cleaned)
+            logging.info(f"转换后的价格 (float): {price_float}")
+
+            # 判断价格是否在预警范围内
+            if price_float < 2100 or price_float > 2500:
+                logging.info(f"价格 {price_float} 触发提醒条件 (< 2100 or > 2500)。准备发送提醒。")
+                # 构造更详细的提醒消息
+                message = f"当前价格: {eth_price_str}，已触发预警！"
+                send_wechat_message(access_token, message)
+            else:
+                logging.info(f"当前价格 {price_float} 在正常范围内 (2100-2500)，不发送提醒。")
+
+        except (ValueError, TypeError) as e:
+            logging.error(f"无法将价格字符串 '{eth_price_str}' 转换为数字: {e}")
+            # 如果转换失败，也发送一条通知，以便排查问题
+            error_message = f"获取价格成功，但格式无法解析: {eth_price_str}"
+            send_wechat_message(access_token, error_message)
     else:
+        # 如果获取价格失败，发送失败通知
         send_wechat_message(access_token, "运行失败，未能获取以太坊价格")
 
     logging.info("eth_report 函数结束")
