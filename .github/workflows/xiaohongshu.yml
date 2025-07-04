@@ -1,10 +1,13 @@
-# Workflow 的名称
-name: Run Xiaohongshu Uploader
+name: Run Xiaohongshu Uploader via API
 
-# 触发器：当手动触发时运行此工作流
+# 触发器：当收到 repository_dispatch 事件时运行
 on:
-  workflow_dispatch:
-
+  repository_dispatch:
+    # 你可以定义事件类型来触发不同的工作流
+    # 这里我们监听一个叫 'run-uploader' 的事件
+    # 如果不写 types，则任何 repository_dispatch 都会触发
+    types: [run-uploader]
+    
 # 定义工作任务
 jobs:
   build-and-run:
