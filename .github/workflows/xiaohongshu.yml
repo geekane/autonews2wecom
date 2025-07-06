@@ -27,11 +27,6 @@ jobs:
       - name: Install Playwright Browsers
         run: playwright install --with-deps chromium
       
-      - name: Create cookie file from secret
-        env:
-          XHS_COOKIES_JSON: ${{ secrets.XHS_COOKIES_JSON }}
-        run: echo "$XHS_COOKIES_JSON" > 小红书.json
-      
       - name: Run the uploader script
         env:
           # 从仓库变量中读取图片链接JSON
