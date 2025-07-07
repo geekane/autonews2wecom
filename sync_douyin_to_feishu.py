@@ -11,8 +11,8 @@ import os
 # =================================================================
 
 # --- 从环境变量读取密钥 (Secrets) ---
-DOUYIN_APP_ID = os.getenv("APPID")
-DOUYIN_APP_SECRET = os.getenv("APPSECRET")
+DOUYIN_APP_ID = os.getenv("DOUYIN_APP_ID")
+DOUYIN_APP_SECRET = os.getenv("DOUYIN_APP_SECRET")
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 
