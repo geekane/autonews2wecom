@@ -105,6 +105,61 @@ class CliRunner:
             logging.error(f"读取Excel '{file_path}' 时出错: {e}")
             return []
 
+    def _get_poi_ids_from_feishu_table(self):
+        """
+        【新增功能】从指定的飞书表格中获取所有门店的POI ID。
+        """
+        # 根据用户提供的URL: https://xxmdlvta34m.feishu.cn/base/MslRbdwPca7P6qsqbqgcvpBGnRh?table=tblyKop71MJbXThq...
+        poi_app_token = "MslRbdwPca7P6qsqbqgcvpBGnRh"
+        poi_table_id = "tblyKop71MJbXThq"
+        # 根据截图，字段名为"ID"
+        poi_id_field_name = "ID"
+
+        logging.info(f"开始从飞书POI表格 (Table ID: {poi_table_id}) 获取门店POI ID...")
+
+        if not self.feishu_client:
+            logging.error("飞书客户端未初始化，无法获取POI ID。")
+            return []
+
+        all_poi_ids = []
+        page_token = None
+        while True:
+            try:
+                request_body = SearchAppTableRecordRequestBody.builder().field_names([poi_id_field_name]).build()
+                request_builder = SearchAppTableRecordRequest.builder().app_token(poi_app_token).table_id(poi_table_id).page_size(500).request_body(request_body)
+
+                if page_token:
+                    request_builder.page_token(page_token)
+
+                request = request_builder.build()
+                response = self.feishu_client.bitable.v1.app_table_record.search(request)
+
+                if not response.success():
+                    logging.error(f"查询飞书POI表格失败: Code={response.code}, Msg={response.msg}")
+                    return []
+
+                items = response.data.items or []
+                for item in items:
+                    if poi_id_field_name in item.fields and item.fields[poi_id_field_name]:
+                        poi_id_text = item.fields[poi_id_field_name][0].get('text', '')
+                        if poi_id_text:
+                            all_poi_ids.append(poi_id_text.strip())
+
+                if response.data.has_more:
+                    page_token = response.data.page_token
+                else:
+                    break
+
+            except Exception as e:
+                logging.error(f"查询飞书POI表格时发生异常: {e}", exc_info=True)
+                return []
+
+        if not all_poi_ids:
+            logging.error(f"未能从飞书表格 '{poi_table_id}' 的 '{poi_id_field_name}' 列读取到任何POI ID。")
+        else:
+            logging.info(f"成功从飞书获取到 {len(all_poi_ids)} 个门店POI ID。")
+        return all_poi_ids
+
     def _query_douyin_online_products(self, params):
         if not self.douyin_access_token:
             logging.error("抖音 Access Token 缺失, 无法查询。")
@@ -300,7 +355,6 @@ class CliRunner:
 
         return "查询失败", "未知错误"
 
-# ======================== 请将文件中的 task_set_commission 替换为这个版本 ========================
     async def task_set_commission(self):
         """
         从飞书获取“抽佣比例”为空的商品ID，并为它们批量设置佣金。
@@ -379,8 +433,6 @@ class CliRunner:
                 self.feishu_client = None
             logging.info("\n步骤3执行完毕。")
 
-
-# ======================== 请将文件中的 _set_single_commission 替换为这个版本 ========================
     async def _set_single_commission(self, page, product_id, commission_values):
         """
         在页面上为单个商品ID设置佣金。
@@ -446,7 +498,6 @@ class CliRunner:
 
             return False
 
-
     def _send_wechat_notification(self, count):
         """发送企业微信机器人通知。"""
         webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=0e364220-efc0-4e7b-b505-129ea3371053"
@@ -502,12 +553,12 @@ class CliRunner:
                 logging.error("无法从飞书获取现有数据，任务中止。")
                 return
 
-            poi_excel_path = self.configs.get('feishu_poi_excel', '门店ID.xlsx')
-            if not os.path.exists(poi_excel_path):
-                logging.error(f"找不到门店ID文件: {poi_excel_path}")
+            # --- 修改开始: 从飞书API获取POI ID，替换原来的Excel读取方式 ---
+            poi_ids = self._get_poi_ids_from_feishu_table()
+            if not poi_ids:
+                logging.error("任务中止，因为未能从飞书获取到任何POI ID。请检查相关表格和配置。")
                 return
-            poi_ids = self._load_poi_ids_from_excel(poi_excel_path)
-            if not poi_ids: return
+            # --- 修改结束 ---
 
             poi_batch_size = self.configs.get('poi_batch_size', 20)
             total_poi_batches = (len(poi_ids) + poi_batch_size - 1) // poi_batch_size
