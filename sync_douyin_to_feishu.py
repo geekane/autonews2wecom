@@ -11,11 +11,8 @@ import os
 # =================================================================
 
 # --- 从环境变量读取密钥 (Secrets) ---
-# 对应您已有的 GitHub Secrets: APPID, APPSECRET
 DOUYIN_APP_ID = os.getenv("APPID")
 DOUYIN_APP_SECRET = os.getenv("APPSECRET")
-
-# 对应您已有的 GitHub Secrets: FEISHU_APP_ID, FEISHU_APP_SECRET
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 
@@ -23,25 +20,26 @@ FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 DOUYIN_ACCOUNT_ID = "7241078611527075855"
 FEISHU_BITABLE_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
 FEISHU_BITABLE_TABLE_ID = "tbl6jUYvV6TXXOZ2"
-TARGET_FIELD_NAME = "商品ID" # 这个字段名也可以硬编码
+TARGET_FIELD_NAME = "商品ID"
 
 # =================================================================
 # 2. API 调用函数
-# (这部分核心逻辑无变化)
 # =================================================================
 
-### --- 抖音API函数 ---
 def get_douyin_token():
     print(">>> 正在获取抖音 access-token...")
     url = "https://open.douyin.com/oauth/client_token/"
     payload = {"grant_type": "client_credential", "client_key": DOUYIN_APP_ID, "client_secret": DOUYIN_APP_SECRET}
     try:
-        response = requests.post(url, headers={'Content-Type': 'application/json'}, json=payload)
+        # ***** 关键修改：增加超时设置 *****
+        response = requests.post(url, headers={'Content-Type': 'application/json'}, json=payload, timeout=30)
         response.raise_for_status()
         data = response.json()
         if data.get("data", {}).get("error_code") == 0:
             print("    -> 抖音 access-token 获取成功！")
             return data["data"]["access_token"]
+    except requests.exceptions.Timeout:
+        print("    -> 抖音 access-token 获取失败: 请求超时 (Timeout)。")
     except Exception as e:
         print(f"    -> 抖音 access-token 获取失败: {e}")
     return None
@@ -54,7 +52,8 @@ def get_douyin_poi_list(douyin_token, account_id):
     while True:
         params = {'account_id': account_id, 'page': page, 'size': 50}
         try:
-            response = requests.get(poi_url, headers={'Content-Type': 'application/json', 'access-token': douyin_token}, params=params)
+            # ***** 关键修改：增加超时设置 *****
+            response = requests.get(poi_url, headers={'Content-Type': 'application/json', 'access-token': douyin_token}, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
             if data.get("data", {}).get("error_code") == 0:
@@ -76,7 +75,8 @@ def get_products_for_single_poi(douyin_token, account_id, poi_id):
         params = {'account_id': account_id, 'poi_ids': [poi_id], 'count': 50}
         if cursor: params['cursor'] = cursor
         try:
-            response = requests.get(product_url, headers={'content-type': 'application/json', 'access-token': douyin_token}, params=params)
+            # ***** 关键修改：增加超时设置 *****
+            response = requests.get(product_url, headers={'content-type': 'application/json', 'access-token': douyin_token}, params=params, timeout=30)
             data = response.json()
             if data.get("data", {}).get("error_code") == 0:
                 products = data["data"].get("products", [])
@@ -91,7 +91,7 @@ def get_products_for_single_poi(douyin_token, account_id, poi_id):
         except Exception: break
     return product_ids
 
-### --- 飞书API函数 ---
+### --- 飞书API函数 (这部分由SDK处理，一般无需修改) ---
 def get_all_feishu_product_ids(feishu_client, app_token, table_id, field_name):
     print(f"\n>>> 正在从飞书多维表格 '{table_id}' 获取已有的 '{field_name}' 作为基准数据...")
     existing_ids = set()
@@ -154,14 +154,13 @@ def main():
     feishu_client = lark.Client.builder() \
         .app_id(FEISHU_APP_ID) \
         .app_secret(FEISHU_APP_SECRET) \
-        .log_level(lark.LogLevel.INFO) \
+        .log_level(lark.LogLevel.INFO)
         .build()
     print("    -> 飞书客户端初始化成功！")
 
     existing_feishu_ids = get_all_feishu_product_ids(feishu_client, FEISHU_BITABLE_APP_TOKEN, FEISHU_BITABLE_TABLE_ID, TARGET_FIELD_NAME)
     all_poi_ids = get_douyin_poi_list(douyin_token, DOUYIN_ACCOUNT_ID)
     
-    # 移除10家限制，处理全部门店
     print(f"\n>>> [正式运行] 开始处理全部 {len(all_poi_ids)} 家门店的数据...")
     print("="*60)
     
