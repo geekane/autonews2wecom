@@ -11,6 +11,7 @@ import os
 # =================================================================
 
 # --- 从环境变量读取密钥 (Secrets) ---
+# 使用专属的、清晰的变量名
 DOUYIN_APP_ID = os.getenv("DOUYIN_APP_ID")
 DOUYIN_APP_SECRET = os.getenv("DOUYIN_APP_SECRET")
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
@@ -24,11 +25,16 @@ TARGET_FIELD_NAME = "商品ID"
 
 # =================================================================
 # 2. API 调用函数
+# (这部分核心逻辑无变化)
 # =================================================================
 
 def get_douyin_token():
-    """获取抖音 access-token (已增强错误日志)"""
+    """获取抖音 access-token (带详细错误日志)"""
     print(">>> 正在获取抖音 access-token...")
+    if not DOUYIN_APP_ID or not DOUYIN_APP_SECRET:
+        print("    -> 错误: 抖音的 DOUYIN_APP_ID 或 DOUYIN_APP_SECRET 环境变量未设置！请检查GitHub Actions的Secrets配置。")
+        return None
+        
     url = "https://open.douyin.com/oauth/client_token/"
     payload = {"grant_type": "client_credential", "client_key": DOUYIN_APP_ID, "client_secret": DOUYIN_APP_SECRET}
     try:
@@ -52,7 +58,6 @@ def get_douyin_token():
     return None
 
 def get_douyin_poi_list(douyin_token, account_id):
-    # (此函数无变化)
     print("\n>>> 正在从抖音获取所有门店POI列表...")
     poi_ids = []
     page = 1
@@ -75,7 +80,6 @@ def get_douyin_poi_list(douyin_token, account_id):
     return poi_ids
 
 def get_products_for_single_poi(douyin_token, account_id, poi_id):
-    # (此函数无变化)
     product_ids = set()
     cursor = None
     product_url = "https://open.douyin.com/goodlife/v1/goods/product/online/query/"
@@ -98,7 +102,6 @@ def get_products_for_single_poi(douyin_token, account_id, poi_id):
         except Exception: break
     return product_ids
 
-### --- 飞书API函数 (无变化) ---
 def get_all_feishu_product_ids(feishu_client, app_token, table_id, field_name):
     print(f"\n>>> 正在从飞书多维表格 '{table_id}' 获取已有的 '{field_name}' 作为基准数据...")
     existing_ids = set()
@@ -148,9 +151,6 @@ def add_records_to_feishu(feishu_client, app_token, table_id, field_name, new_id
         print(f"    -> 批次写入时发生异常: {e}")
         return False
 
-# =================================================================
-# 3. 主执行流程
-# =================================================================
 def main():
     douyin_token = get_douyin_token()
     if not douyin_token:
