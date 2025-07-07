@@ -29,7 +29,7 @@ TARGET_FIELD_NAME = "商品ID"
 def get_douyin_token():
     print(">>> 正在获取抖音 access-token...")
     url = "https://open.douyin.com/oauth/client_token/"
-    payload = {"grant_type": "client_credential", "client_key": DOUYIN_APP_ID, "client_secret": DOUYIN_APP_SECRET}
+    payload = {"grant_type": "client_credential", "client_key": APP_ID, "client_secret": APP_SECRET}
     try:
         # ***** 关键修改：增加超时设置 *****
         response = requests.post(url, headers={'Content-Type': 'application/json'}, json=payload, timeout=30)
