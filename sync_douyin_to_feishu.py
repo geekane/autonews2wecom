@@ -154,7 +154,7 @@ def main():
     feishu_client = lark.Client.builder() \
         .app_id(FEISHU_APP_ID) \
         .app_secret(FEISHU_APP_SECRET) \
-        .log_level(lark.LogLevel.INFO)
+        .log_level(lark.LogLevel.INFO) \
         .build()
     print("    -> 飞书客户端初始化成功！")
 
