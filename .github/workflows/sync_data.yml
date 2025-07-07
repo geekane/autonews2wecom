@@ -34,8 +34,8 @@ jobs:
       - name: Run the sync script
         env:
           # 复用您已有的Secrets
-          APPID: ${{ secrets.APPID }}
-          APPSECRET: ${{ secrets.APPSECRET }}
+          DOUYIN_APP_ID: ${{ secrets.DOUYIN_APP_ID }}
+          DOUYIN_APP_SECRET: ${{ secrets.DOUYIN_APP_SECRET }}
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
         run: python sync_douyin_to_feishu.py # <--- 请确保这里是您正确的Python文件名
