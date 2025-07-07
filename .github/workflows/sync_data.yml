@@ -1,0 +1,41 @@
+# 工作流的名称
+name: Sync Douyin Products to Feishu
+
+# 工作流的触发条件
+on:
+  # 允许手动触发
+  workflow_dispatch:
+
+  # 定时触发: 每天北京时间上午10点 (UTC 2:00)
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  sync-job:
+    runs-on: ubuntu-latest
+    steps:
+      # 步骤1: 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤2: 设置Python环境
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      # 步骤3: 安装依赖库
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 步骤4: 运行同步脚本
+      - name: Run the sync script
+        env:
+          # 复用您已有的Secrets
+          APPID: ${{ secrets.APPID }}
+          APPSECRET: ${{ secrets.APPSECRET }}
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+        run: python sync_douyin_to_feishu.py # <--- 请确保这里是您正确的Python文件名
