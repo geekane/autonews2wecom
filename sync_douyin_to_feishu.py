@@ -27,24 +27,32 @@ TARGET_FIELD_NAME = "商品ID"
 # =================================================================
 
 def get_douyin_token():
+    """获取抖音 access-token (已增强错误日志)"""
     print(">>> 正在获取抖音 access-token...")
     url = "https://open.douyin.com/oauth/client_token/"
-    payload = {"grant_type": "client_credential", "client_key": APP_ID, "client_secret": APP_SECRET}
+    payload = {"grant_type": "client_credential", "client_key": DOUYIN_APP_ID, "client_secret": DOUYIN_APP_SECRET}
     try:
-        # ***** 关键修改：增加超时设置 *****
         response = requests.post(url, headers={'Content-Type': 'application/json'}, json=payload, timeout=30)
         response.raise_for_status()
         data = response.json()
         if data.get("data", {}).get("error_code") == 0:
             print("    -> 抖音 access-token 获取成功！")
             return data["data"]["access_token"]
+        else:
+            print(f"    -> 抖音 API 返回业务错误: {data}")
+            return None
     except requests.exceptions.Timeout:
         print("    -> 抖音 access-token 获取失败: 请求超时 (Timeout)。")
+    except requests.exceptions.RequestException as e:
+        print(f"    -> 抖音 access-token 获取失败: 发生网络请求错误。")
+        print(f"       具体异常 (Exception): {e}")
     except Exception as e:
-        print(f"    -> 抖音 access-token 获取失败: {e}")
+        print(f"    -> 抖音 access-token 获取失败: 发生未知错误。")
+        print(f"       具体异常 (Exception): {e}")
     return None
 
 def get_douyin_poi_list(douyin_token, account_id):
+    # (此函数无变化)
     print("\n>>> 正在从抖音获取所有门店POI列表...")
     poi_ids = []
     page = 1
@@ -52,7 +60,6 @@ def get_douyin_poi_list(douyin_token, account_id):
     while True:
         params = {'account_id': account_id, 'page': page, 'size': 50}
         try:
-            # ***** 关键修改：增加超时设置 *****
             response = requests.get(poi_url, headers={'Content-Type': 'application/json', 'access-token': douyin_token}, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
@@ -68,6 +75,7 @@ def get_douyin_poi_list(douyin_token, account_id):
     return poi_ids
 
 def get_products_for_single_poi(douyin_token, account_id, poi_id):
+    # (此函数无变化)
     product_ids = set()
     cursor = None
     product_url = "https://open.douyin.com/goodlife/v1/goods/product/online/query/"
@@ -75,7 +83,6 @@ def get_products_for_single_poi(douyin_token, account_id, poi_id):
         params = {'account_id': account_id, 'poi_ids': [poi_id], 'count': 50}
         if cursor: params['cursor'] = cursor
         try:
-            # ***** 关键修改：增加超时设置 *****
             response = requests.get(product_url, headers={'content-type': 'application/json', 'access-token': douyin_token}, params=params, timeout=30)
             data = response.json()
             if data.get("data", {}).get("error_code") == 0:
@@ -91,7 +98,7 @@ def get_products_for_single_poi(douyin_token, account_id, poi_id):
         except Exception: break
     return product_ids
 
-### --- 飞书API函数 (这部分由SDK处理，一般无需修改) ---
+### --- 飞书API函数 (无变化) ---
 def get_all_feishu_product_ids(feishu_client, app_token, table_id, field_name):
     print(f"\n>>> 正在从飞书多维表格 '{table_id}' 获取已有的 '{field_name}' 作为基准数据...")
     existing_ids = set()
