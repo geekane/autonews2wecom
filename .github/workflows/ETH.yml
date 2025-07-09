@@ -2,35 +2,32 @@ name: ETH价格追踪 (Playwright版 - 优化)
 
 on:
   schedule:
-    - cron: '0 * * * *'  # 每小时的第0分钟运行
-  workflow_dispatch:   # 允许手动触发
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   fetch-and-send:
-    runs-on: ubuntu-latest # Runner 依然是 ubuntu-latest
+    runs-on: ubuntu-latest
     
     # 使用 Playwright 官方的 Docker 容器来运行所有步骤
     container:
-      image: mcr.microsoft.com/playwright/python:v1.44.0-jammy # 使用最新的稳定版镜像
+      image: mcr.microsoft.com/playwright/python:v1.44.0-jammy
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-
-      - name: Set up Python # 这一步其实可以省略，因为容器里已经有 Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
+        
       - name: Install Python dependencies
+        # 直接使用容器内自带的 python 和 pip
         run: |
-          python -m pip install --upgrade pip
-          pip install playwright requests
-
+          pip install --upgrade pip
+          pip install requests
+          
       - name: Run script
         env:
           APPID: ${{ secrets.APPID }}
           APPSECRET: ${{ secrets.APPSECRET }}
           OPENID: ${{ secrets.OPENID }}
           ETH_TEMPLATE_ID: ${{ secrets.ETH_TEMPLATE_ID }}
+        # 直接使用容器内自带的 python
         run: python eth_playwright.py
