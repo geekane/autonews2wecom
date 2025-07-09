@@ -2,7 +2,10 @@ import os
 import requests
 import json
 import logging
+# 注意这里引入了 PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+# ... (前面的配置和环境变量检查代码保持不变) ...
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,22 +18,16 @@ eth_template_id = os.getenv("ETH_TEMPLATE_ID")
 
 if not all([appID, appSecret, openId, eth_template_id]):
     logging.error("缺少环境变量：请检查 APPID, APPSECRET, OPENID 和 ETH_TEMPLATE_ID 是否已正确设置")
-    exit(1) # 使用非零退出码表示错误
+    exit(1)
 
 def fetch_eth_price(url: str, wait_time: int = 60) -> str | None:
     """
     使用 Playwright 获取动态渲染的页面并提取以太坊价格。
-
-    Args:
-        url (str): 要抓取的 URL。
-        wait_time (int): 等待页面元素加载的最长时间（秒）。
-
-    Returns:
-        str: 以太坊价格，如果获取失败则返回 None。
     """
     logging.info("fetch_eth_price 函数开始 (使用 Playwright)")
     
     with sync_playwright() as p:
+        browser = None # 确保 browser 变量在 try 外部定义
         try:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(
@@ -39,10 +36,12 @@ def fetch_eth_price(url: str, wait_time: int = 60) -> str | None:
             page = context.new_page()
             page.goto(url, wait_until='domcontentloaded', timeout=wait_time * 1000)
 
-            # 使用与 Selenium 版本相同的精确 XPath 定位器
+            # ⬇️⬇️⬇️  这是唯一的修改点 ⬇️⬇️⬇️
+            # 在定位器后面加上 .first 来确保我们只选择匹配到的第一个元素，避免严格模式冲突
             price_locator = page.locator(
                 '//span[@data-converter-target="price"][@data-coin-id="279"][@data-price-target="price"]'
-            )
+            ).first
+            # ⬆️⬆️⬆️  修改结束 ⬆️⬆️⬆️
             
             # 等待元素可见
             price_locator.wait_for(state='visible', timeout=wait_time * 1000)
@@ -53,26 +52,28 @@ def fetch_eth_price(url: str, wait_time: int = 60) -> str | None:
             browser.close()
             return price
 
-        except PlaywrightTimeoutError:
-            logging.error(f"等待价格元素加载超时 ({wait_time}秒)")
-            # 尝试保存截图以供调试
+        except PlaywrightTimeoutError as e:
+            # 使错误日志更具体
+            logging.error(f"等待或定位价格元素时超时或出错: {e}")
             try:
-                page.screenshot(path="error_playwright.png")
-                logging.info("已保存错误截图到 error_playwright.png")
+                # 检查页面是否存在再截图
+                if 'page' in locals():
+                    page.screenshot(path="error_playwright.png")
+                    logging.info("已保存错误截图到 error_playwright.png")
             except Exception as screenshot_e:
                 logging.error(f"保存截图失败: {screenshot_e}")
-            if 'browser' in locals() and browser.is_connected():
+            if browser and browser.is_connected():
                 browser.close()
             return None
         except Exception as e:
             logging.error(f"使用 Playwright 获取页面信息失败: {e}")
-            if 'browser' in locals() and browser.is_connected():
+            if browser and browser.is_connected():
                 browser.close()
             return None
     
     logging.info("fetch_eth_price 函数结束")
 
-# get_access_token 和 send_wechat_message 函数保持不变，因为它们不涉及浏览器操作
+# ... (get_access_token, send_wechat_message, eth_report 和 main 部分保持不变) ...
 def get_access_token():
     logging.info("get_access_token 函数开始")
     url = f'https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={appID.strip()}&secret={appSecret.strip()}'
