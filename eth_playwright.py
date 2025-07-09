@@ -30,25 +30,23 @@ def fetch_eth_price(url: str, wait_time: int = 60) -> str | None:
         try:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                # 增加视口大小，更接近真实浏览器，有时可以避免元素因窗口太小而被隐藏
-                viewport={'width': 1920, 'height': 1080}
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
             )
             page = context.new_page()
-            logging.info(f"正在导航到: {url}")
-            page.goto(url, wait_until='networkidle', timeout=wait_time * 1000)
-            logging.info("页面加载完成。")
+            page.goto(url, wait_until='domcontentloaded', timeout=wait_time * 1000)
 
-            # ⬇️⬇️⬇️  这是最终的、最稳健的定位器 ⬇️⬇️⬇️
-            # 使用 CSS 选择器，结合了属性和 :visible 伪类
-            # 含义是：找到具有这些属性并且当前可见的 <span> 元素
-            css_locator = 'span[data-coin-id="279"][data-price-target="price"]:visible'
-            price_locator = page.locator(css_locator).first
-
-            logging.info(f"使用定位器: {css_locator}")
+            price_locator = page.locator(
+                '//span[@data-converter-target="price"][@data-coin-id="279"][@data-price-target="price"]'
+            ).first
             
-            # 等待这个可见的元素出现，然后直接获取内容
-            price = price_locator.text_content(timeout=15000) # 等待15秒
+            # ⬇️⬇️⬇️  核心修改：模仿 Selenium 的 `presence_of_element_located` 逻辑 ⬇️⬇️⬇️
+            # 1. 等待元素被附加到 DOM，不关心它是否可见。
+            logging.info("等待价格元素附加到 DOM...")
+            price_locator.wait_for(state='attached', timeout=30000) # 等待30秒
+            logging.info("元素已附加到 DOM。")
+
+            # 2. 元素已存在，现在直接获取它的文本内容。
+            price = price_locator.text_content()
             # ⬆️⬆️⬆️  修改结束 ⬆️⬆️⬆️
 
             if price:
@@ -61,7 +59,7 @@ def fetch_eth_price(url: str, wait_time: int = 60) -> str | None:
             return price
 
         except PlaywrightTimeoutError as e:
-            logging.error(f"等待或定位价格元素时超时或出错: {e}")
+            logging.error(f"在等待元素附加到 DOM 时超时: {e}")
             try:
                 if 'page' in locals():
                     page.screenshot(path="error_playwright.png")
