@@ -9,19 +9,17 @@ jobs:
   fetch-and-send:
     runs-on: ubuntu-latest
     
-    # 使用 Playwright 官方的 Docker 容器来运行所有步骤
     container:
       image: mcr.microsoft.com/playwright/python:v1.44.0-jammy
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        
+
       - name: Install Python dependencies
-        # 直接使用容器内自带的 python 和 pip
         run: |
           pip install --upgrade pip
-          pip install requests
+          pip install playwright requests
           
       - name: Run script
         env:
@@ -29,5 +27,4 @@ jobs:
           APPSECRET: ${{ secrets.APPSECRET }}
           OPENID: ${{ secrets.OPENID }}
           ETH_TEMPLATE_ID: ${{ secrets.ETH_TEMPLATE_ID }}
-        # 直接使用容器内自带的 python
         run: python eth_playwright.py
