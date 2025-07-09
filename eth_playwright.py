@@ -2,7 +2,6 @@ import os
 import requests
 import json
 import logging
-# 注意这里引入了 PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 # ... (前面的配置和环境变量检查代码保持不变) ...
@@ -27,36 +26,43 @@ def fetch_eth_price(url: str, wait_time: int = 60) -> str | None:
     logging.info("fetch_eth_price 函数开始 (使用 Playwright)")
     
     with sync_playwright() as p:
-        browser = None # 确保 browser 变量在 try 外部定义
+        browser = None
         try:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                # 增加视口大小，更接近真实浏览器，有时可以避免元素因窗口太小而被隐藏
+                viewport={'width': 1920, 'height': 1080}
             )
             page = context.new_page()
-            page.goto(url, wait_until='domcontentloaded', timeout=wait_time * 1000)
+            logging.info(f"正在导航到: {url}")
+            page.goto(url, wait_until='networkidle', timeout=wait_time * 1000)
+            logging.info("页面加载完成。")
 
-            # ⬇️⬇️⬇️  这是唯一的修改点 ⬇️⬇️⬇️
-            # 在定位器后面加上 .first 来确保我们只选择匹配到的第一个元素，避免严格模式冲突
-            price_locator = page.locator(
-                '//span[@data-converter-target="price"][@data-coin-id="279"][@data-price-target="price"]'
-            ).first
+            # ⬇️⬇️⬇️  这是最终的、最稳健的定位器 ⬇️⬇️⬇️
+            # 使用 CSS 选择器，结合了属性和 :visible 伪类
+            # 含义是：找到具有这些属性并且当前可见的 <span> 元素
+            css_locator = 'span[data-coin-id="279"][data-price-target="price"]:visible'
+            price_locator = page.locator(css_locator).first
+
+            logging.info(f"使用定位器: {css_locator}")
+            
+            # 等待这个可见的元素出现，然后直接获取内容
+            price = price_locator.text_content(timeout=15000) # 等待15秒
             # ⬆️⬆️⬆️  修改结束 ⬆️⬆️⬆️
-            
-            # 等待元素可见
-            price_locator.wait_for(state='visible', timeout=wait_time * 1000)
 
-            price = price_locator.inner_text()
-            logging.info(f"成功获取以太坊价格: {price}")
-            
+            if price:
+                price = price.strip()
+                logging.info(f"成功获取以太坊价格: {price}")
+            else:
+                logging.warning("定位器找到了元素，但未能获取到文本内容。")
+
             browser.close()
             return price
 
         except PlaywrightTimeoutError as e:
-            # 使错误日志更具体
             logging.error(f"等待或定位价格元素时超时或出错: {e}")
             try:
-                # 检查页面是否存在再截图
                 if 'page' in locals():
                     page.screenshot(path="error_playwright.png")
                     logging.info("已保存错误截图到 error_playwright.png")
