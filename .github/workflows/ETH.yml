@@ -1,4 +1,4 @@
-name: ETH价格追踪 (Playwright版 - 优化)
+name: ETH价格追踪 (Playwright版 - 使用缓存优化)
 
 on:
   schedule:
@@ -15,6 +15,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      # --- 新增的缓存步骤 ---
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          # 指定要缓存的目录路径 (pip 的默认缓存目录)
+          path: ~/.cache/pip
+          # 定义缓存的唯一密钥。我们用工作流文件本身的哈希值作为关键部分。
+          # 这样，只有当你修改这个文件时（比如增删了要安装的包），缓存才会失效。
+          key: ${{ runner.os }}-pip-${{ hashFiles('.github/workflows/your-workflow-filename.yml') }}
+          # 定义备用密钥，用于部分匹配
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install Python dependencies
         run: |
