@@ -14,10 +14,7 @@ jobs:
     steps:
       - name: 导入代码
         uses: actions/checkout@v4
-
-      - name: 安装相关依赖
-        run: pip install -r requirements.txt
-          
+        
       - name: 运行脚本
         env:
           FEISHU_APP_ID_FROM_SECRET: ${{ secrets.FEISHU_APP_ID }}
