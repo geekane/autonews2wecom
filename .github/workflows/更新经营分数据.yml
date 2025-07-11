@@ -12,11 +12,13 @@ jobs:
       image: mcr.microsoft.com/playwright/python:v1.53.0-jammy # 建议指定一个具体的版本以保证稳定性
 
     steps:
+      - name: 导入代码
+      uses: actions/checkout@v4
 
       - name: 安装相关依赖
         run: pip install -r requirements.txt
           
-      - name: 运行你的 Python 脚本
+      - name: 运行脚本
         env:
           FEISHU_APP_ID_FROM_SECRET: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET_FROM_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
