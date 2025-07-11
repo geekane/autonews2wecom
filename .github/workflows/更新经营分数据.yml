@@ -15,7 +15,7 @@ jobs:
     # 使用微软官方提供的 Playwright Docker 镜像
     # 这个镜像已经预装了 Python, Playwright, 和所有浏览器驱动
     container:
-      image: mcr.microsoft.com/playwright/python:v1.44.0-jammy # 建议指定一个具体的版本以保证稳定性
+      image: mcr.microsoft.com/playwright/python:v1.53.0-jammy # 建议指定一个具体的版本以保证稳定性
 
     steps:
       # 第1步：检出（下载）你的仓库代码到容器中
