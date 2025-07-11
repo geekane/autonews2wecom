@@ -1,7 +1,6 @@
 name: 更新抖音门店名称数据
 
 on:
-  # 允许手动从 Actions 页面触发
   workflow_dispatch:
 
   # 每天 0:00 UTC (北京时间上午8:00) 自动运行
@@ -12,17 +11,16 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright/python:v1.54.0-jammy # 使用一个稳定的版本
+      image: mcr.microsoft.com/playwright/python:v1.53.0-jammy
 
     steps:
       - name: 导入代码
         uses: actions/checkout@v4
 
       - name: 安装 Python 依赖
-        run: pip install pandas lark-oapi openpyxl
+        run: pip install playwright pandas lark-oapi openpyxl
 
       - name: 运行同步脚本
-        # 将 GitHub Secrets 作为环境变量传递给 Python 脚本
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
