@@ -1,6 +1,6 @@
 # .github/workflows/sync_douyin_data.yml
 
-name: Sync Douyin Data to Feishu
+name: 更新经营分数据
 
 on:
   # 1. 允许手动触发工作流
