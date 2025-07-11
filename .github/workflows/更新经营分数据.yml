@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: 导入代码
-      uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       - name: 安装相关依赖
         run: pip install -r requirements.txt
