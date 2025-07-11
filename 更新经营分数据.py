@@ -53,7 +53,7 @@ async def download_from_douyin(cookie_file: str, url: str, download_path: str) -
     logging.info("--- 开始执行抖音数据下载任务 ---")
     if not os.path.exists(cookie_file): logging.error(f"错误: Cookie 文件 '{cookie_file}' 未找到。"); return False
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False, slow_mo=100)
+        browser = await p.chromium.launch(headless=True, slow_mo=100)
         context = await browser.new_context(accept_downloads=True)
         try:
             with open(cookie_file, 'r', encoding='utf-8') as f: storage_state = json.load(f)
