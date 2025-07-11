@@ -136,12 +136,12 @@ def eth_report():
             price_float = float(price_cleaned)
             logging.info(f"转换后的价格 (float): {price_float}")
 
-            if price_float < 2100 or price_float > 2500:
+            if price_float < 2100 or price_float > 3000:
                 logging.info(f"价格 {price_float} 触发提醒条件 (< 2100 or > 3000)。准备发送提醒。")
                 message = f"当前价格: {eth_price_str}，已触发预警！"
                 send_wechat_message(access_token, message)
             else:
-                logging.info(f"当前价格 {price_float} 在正常范围内 (2100-2500)，不发送提醒。")
+                logging.info(f"当前价格 {price_float} 在正常范围内 (2100-3000)，不发送提醒。")
 
         except (ValueError, TypeError) as e:
             logging.error(f"无法将价格字符串 '{eth_price_str}' 转换为数字: {e}")
