@@ -1,19 +1,13 @@
 name: 经营分数据更新
 
 on:
-  # 允许手动触发
   workflow_dispatch:
-
-  # 每天北京时间上午10点 (UTC时间凌晨2点) 自动运行
   schedule:
     - cron: '0 2 * * *'
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-
-    # 使用微软官方提供的 Playwright Docker 镜像
-    # 这个镜像已经预装了 Python, Playwright, 和所有浏览器驱动
     container:
       image: mcr.microsoft.com/playwright/python:v1.53.0-jammy # 建议指定一个具体的版本以保证稳定性
 
@@ -22,16 +16,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 第2步：安装 Python 依赖库
-      # 容器内已有pip，直接安装即可
-      - name: Install dependencies from requirements.txt
+      - name: 安装相关依赖
         run: pip install -r requirements.txt
           
-      # 第3步：运行你的 Python 脚本
-      - name: Run the sync script
+      - name: 运行你的 Python 脚本
         env:
-          # 将 GitHub Secrets 赋值给环境变量
-          # 这些名字需要和你的Python脚本中的 os.environ.get() 匹配
           FEISHU_APP_ID_FROM_SECRET: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET_FROM_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
         run: python 更新经营分数据.py
