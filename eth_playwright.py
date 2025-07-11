@@ -4,12 +4,8 @@ import json
 import logging
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-# ... (前面的配置和环境变量检查代码保持不变) ...
-
-# 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# 从环境变量中获取测试号信息
 appID = os.getenv("APPID")
 appSecret = os.getenv("APPSECRET")
 openId = os.getenv("OPENID")
@@ -39,7 +35,7 @@ def fetch_eth_price(url: str, wait_time: int = 60) -> str | None:
                 '//span[@data-converter-target="price"][@data-coin-id="279"][@data-price-target="price"]'
             ).first
             
-            # ⬇️⬇️⬇️  核心修改：模仿 Selenium 的 `presence_of_element_located` 逻辑 ⬇️⬇️⬇️
+            # ⬇模仿 Selenium 的 `presence_of_element_located` 逻辑
             # 1. 等待元素被附加到 DOM，不关心它是否可见。
             logging.info("等待价格元素附加到 DOM...")
             price_locator.wait_for(state='attached', timeout=30000) # 等待30秒
@@ -47,7 +43,6 @@ def fetch_eth_price(url: str, wait_time: int = 60) -> str | None:
 
             # 2. 元素已存在，现在直接获取它的文本内容。
             price = price_locator.text_content()
-            # ⬆️⬆️⬆️  修改结束 ⬆️⬆️⬆️
 
             if price:
                 price = price.strip()
@@ -142,7 +137,7 @@ def eth_report():
             logging.info(f"转换后的价格 (float): {price_float}")
 
             if price_float < 2100 or price_float > 2500:
-                logging.info(f"价格 {price_float} 触发提醒条件 (< 2100 or > 2500)。准备发送提醒。")
+                logging.info(f"价格 {price_float} 触发提醒条件 (< 2100 or > 3000)。准备发送提醒。")
                 message = f"当前价格: {eth_price_str}，已触发预警！"
                 send_wechat_message(access_token, message)
             else:
