@@ -1,0 +1,166 @@
+import asyncio
+import json
+import logging
+import os
+import pandas as pd # 虽然不用它读CSV，但为了以防万一保留导入
+from playwright.async_api import async_playwright, TimeoutError
+import lark_oapi as lark
+from lark_oapi.api.bitable.v1 import *
+from typing import List, Dict
+import functools
+
+# --- 1. 全局配置 ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [%(levelname)s] - %(message)s')
+DOUYIN_COOKIE_FILE = '来客.json'
+DOUYIN_TARGET_URL = "https://life.douyin.com/p/liteapp/xscore/chain?enter_method=home_page&groupid=1768205901316096"
+DOWNLOAD_DIR = "downloads"
+DOWNLOADED_FILENAME = "来客连锁店数据.csv"
+
+FEISHU_APP_ID = os.environ.get("FEISHU_APP_ID_FROM_SECRET", "cli_a6672cae343ad00e")
+FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET_FROM_SECRET", "0J4SpfBMeIxJEOXDJMNbofMipRgwkMpV")
+
+# 【硬编码】: 这两个值直接写在代码里
+FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
+FEISHU_TABLE_ID = "tblnLHXN5LKbe27R"
+
+# --- 2. 飞书多维表格操作模块 ---
+class FeishuBitableManager:
+    def __init__(self, app_id: str, app_secret: str):
+        self.client = lark.Client.builder().app_id(app_id).app_secret(app_secret).log_level(lark.LogLevel.INFO).build()
+
+    async def _run_sync_in_executor(self, sync_func, *args, **kwargs):
+        loop = asyncio.get_running_loop()
+        p = functools.partial(sync_func, *args, **kwargs)
+        return await loop.run_in_executor(None, p)
+
+    async def batch_add_records(self, app_token: str, table_id: str, records_data: List[Dict]):
+        if not records_data: logging.warning("没有数据需要添加到飞书多维表格。"); return
+        logging.info(f"准备向表格 {table_id} 新增 {len(records_data)} 条记录...")
+        for i in range(0, len(records_data), 1000):
+            chunk = records_data[i:i+1000]
+            request_records = [AppTableRecord.builder().fields(record).build() for record in chunk]
+            req_body = BatchCreateAppTableRecordRequestBody.builder().records(request_records).build()
+            req = BatchCreateAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).request_body(req_body).build()
+            resp: BatchCreateAppTableRecordResponse = await self._run_sync_in_executor(self.client.bitable.v1.app_table_record.batch_create, req)
+            if not resp.success():
+                logging.error(f"批量添加记录失败: {resp.code}, {resp.msg}, log_id: {resp.get_log_id()}")
+                lark.logger.error(f"resp: \n{json.dumps(json.loads(resp.raw.content), indent=4, ensure_ascii=False)}")
+            else: logging.info(f"   - 成功新增 {len(chunk)} 条记录。")
+        logging.info("所有记录新增完成。")
+
+# --- 3. 抖音数据下载模块 ---
+async def download_from_douyin(cookie_file: str, url: str, download_path: str) -> bool:
+    logging.info("--- 开始执行抖音数据下载任务 ---")
+    if not os.path.exists(cookie_file): logging.error(f"错误: Cookie 文件 '{cookie_file}' 未找到。"); return False
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=False, slow_mo=100)
+        context = await browser.new_context(accept_downloads=True)
+        try:
+            with open(cookie_file, 'r', encoding='utf-8') as f: storage_state = json.load(f)
+            await context.add_cookies(storage_state['cookies'])
+            logging.info(f"成功从 '{cookie_file}' 加载 Cookies。")
+        except Exception as e:
+            logging.error(f"加载 Cookie 文件时出错: {e}"); await browser.close(); return False
+        page = await context.new_page()
+        try:
+            logging.info(f"正在直接导航到目标页面: {url}")
+            await page.goto(url, wait_until="domcontentloaded")
+            async with page.expect_download(timeout=90000) as download_info:
+                logging.info("正在定位并点击'下载数据'文本 (Playwright会自动等待其可用)...")
+                await page.get_by_text("下载数据").click()
+                logging.info("   - 点击已成功触发，等待文件下载完成...")
+                download = await download_info.value
+            await download.save_as(download_path)
+            logging.info(f"文件下载成功 (原始名: {download.suggested_filename})")
+            logging.info(f"文件已保存至: '{download_path}'")
+            return True
+        except TimeoutError as e: logging.error(f"操作超时: 等待'下载数据'元素可用超过30秒。 {e}"); return False
+        except Exception as e: logging.error(f"在自动化流程中发生未知错误: {e}"); return False
+        finally: await browser.close(); logging.info("抖音下载浏览器已关闭。")
+
+# --- 4. 数据处理和主流程 (手动解析CSV最终版) ---
+def process_downloaded_data(filepath: str) -> List[Dict]:
+    logging.info("正在处理下载的数据文件 (采用手动解析模式)...")
+
+    # 【步骤1】定义正确的、你飞书表格中的字段名列表
+    CORRECT_COLUMN_NAMES = [
+        "门店名称", "门店id", "门店经营分", "门店经营分等级", "未满分维度", 
+        "装修得分", "装修满分", "商品得分", "商品满分", "内容得分", "内容满分", 
+        "体验得分", "体验满分", "评价得分", "评价满分", "区域户id", "区域户名称"
+    ]
+    
+    # 【步骤2】定义哪些列应该是数字类型
+    NUMERIC_COLUMNS = {
+        "门店经营分", "装修得分", "装修满分", "商品得分", "商品满分", 
+        "内容得分", "内容满分", "体验得分", "体验满分", "评价得分", "评价满分"
+    }
+
+    records_to_add = []
+    try:
+        with open(filepath, 'r', encoding='utf-8-sig') as f:
+            # 跳过第一行混乱的表头
+            next(f) 
+            
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # 手动用逗号分割，并清理每个元素
+                values = [v.strip().rstrip('\t').strip() for v in line.split(',')]
+                
+                # 检查列数是否匹配，如果不匹配则跳过该行并打印警告
+                if len(values) != len(CORRECT_COLUMN_NAMES):
+                    logging.warning(f"数据行与列名数量不匹配，跳过此行: {line}")
+                    continue
+                
+                record = dict(zip(CORRECT_COLUMN_NAMES, values))
+                
+                # 进行类型转换和清理
+                for key, value in record.items():
+                    # 如果值为空字符串，则设为 None (在JSON中会变为null)
+                    if value == '':
+                        record[key] = None
+                    # 如果字段应该是数字类型，进行转换
+                    elif key in NUMERIC_COLUMNS:
+                        try:
+                            # 尝试转换为浮点数，以处理可能的小数
+                            record[key] = float(value)
+                        except (ValueError, TypeError):
+                            # 如果转换失败（比如值是文本），则设为 None
+                            record[key] = None
+                
+                records_to_add.append(record)
+
+        logging.info(f"数据处理完成，共 {len(records_to_add)} 条记录。")
+        
+        # 打印第一条处理好的记录，供最终确认
+        if records_to_add:
+            logging.info("--- 最终发送给飞书的第一条记录预览 ---")
+            print(json.dumps(records_to_add[0], indent=2, ensure_ascii=False))
+            logging.info("--- 预览结束 ---")
+        return records_to_add
+
+    except Exception as e:
+        logging.error(f"手动解析CSV文件时发生错误: {e}")
+        return []
+
+
+async def main():
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    download_filepath = os.path.join(DOWNLOAD_DIR, DOWNLOADED_FILENAME)
+    
+    success = await download_from_douyin(DOUYIN_COOKIE_FILE, DOUYIN_TARGET_URL, download_filepath)
+    if not success: logging.error("抖音数据下载失败，任务终止。"); return
+        
+    records_to_add = process_downloaded_data(download_filepath)
+    if not records_to_add: logging.error("数据处理失败或无数据，任务终止。"); return
+        
+    logging.info("\n--- 开始执行飞书同步任务 ---")
+    feishu_manager = FeishuBitableManager(FEISHU_APP_ID, FEISHU_APP_SECRET)
+    await feishu_manager.batch_add_records(FEISHU_APP_TOKEN, FEISHU_TABLE_ID, records_to_add)
+    
+    logging.info("\n--- 所有任务执行完毕 ---")
+
+if __name__ == "__main__":
+    asyncio.run(main())
