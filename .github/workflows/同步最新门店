@@ -1,4 +1,4 @@
-name: 更新抖音门店名称数据
+name: 更新门店数据
 
 on:
   workflow_dispatch:
