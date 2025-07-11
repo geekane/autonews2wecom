@@ -1,4 +1,4 @@
-name: 更新门店数据
+name: 【抖音来客】门店数量更新.yml
 
 on:
   workflow_dispatch:
