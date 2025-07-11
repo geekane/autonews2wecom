@@ -1,5 +1,4 @@
 name: 经营分数据更新
-
 on:
   workflow_dispatch:
   schedule:
@@ -9,11 +8,13 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright/python:v1.53.0-jammy # 建议指定一个具体的版本以保证稳定性
-
+      image: mcr.microsoft.com/playwright/python:v1.53.0-jammy
     steps:
       - name: 导入代码
         uses: actions/checkout@v4
+
+      - name: 安装依赖
+        run: pip install pandas lark-oapi
         
       - name: 运行脚本
         env:
