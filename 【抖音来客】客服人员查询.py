@@ -68,12 +68,12 @@ async def main():
             # 策略：先尝试导航一次，然后检查URL。如果被重定向，则进行第二次强制导航。
             
             logging.info(f"开始初次导航至目标网址，并等待网络空闲...")
-            await page.goto(target_url, wait_until="networkidle", timeout=20000)
+            await page.goto(target_url, wait_until="networkidle", timeout=60000)
 
             # 验证URL，如果被重定向，则进行校正导航
             if target_url not in page.url:
                 logging.warning(f"页面被重定向至: {page.url}。正在执行校正导航...")
-                await page.goto(target_url, wait_until="networkidle", timeout=20000)
+                await page.goto(target_url, wait_until="networkidle", timeout=60000)
 
             logging.info("页面加载流程完成，当前URL正确。")
 
