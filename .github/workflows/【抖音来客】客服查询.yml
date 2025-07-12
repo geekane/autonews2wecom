@@ -2,10 +2,9 @@ name: 【抖音来客】客服人员监控
 
 on:
   workflow_dispatch:
-
   schedule:
-    - cron: '0 */8 * * *'
-
+    - cron: '0 0,8 * * *'
+    
 jobs:
   run-monitor:
     runs-on: ubuntu-latest
