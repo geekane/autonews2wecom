@@ -1,5 +1,5 @@
 # 工作流的名称
-name: Sync Douyin Products to Feishu
+name: 【抖音来客】全部新上套餐更新
 
 # 工作流的触发条件
 on:
