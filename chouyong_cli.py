@@ -764,7 +764,7 @@ class CliRunner:
                 await page.goto(target_url, timeout=60000, wait_until="networkidle")
                 logging.info("   ✔ [成功] 网站页面加载完成。")
 
-                                async def click_if_present(text: str, timeout: int = 3000):
+                async def click_if_present(text: str, timeout: int = 3000):
                     """
                     检查并点击在指定弹窗或提示框内的按钮。
                     """
