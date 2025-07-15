@@ -764,33 +764,43 @@ class CliRunner:
                 await page.goto(target_url, timeout=60000, wait_until="networkidle")
                 logging.info("   ✔ [成功] 网站页面加载完成。")
 
-                async def click_if_present(text: str, timeout: int = 3000):
+                                async def click_if_present(text: str, timeout: int = 3000):
+                    """
+                    检查并点击在指定弹窗或提示框内的按钮。
+                    """
                     logging.info(f"   - 正在检查是否存在 '{text}' 按钮...")
                     try:
+                        # 定位在对话框或特定ID的poptip中的按钮
                         locator = page.locator("div[role='dialog'], div[id^='venus_poptip_']").get_by_text(text, exact=True).first
                         await locator.wait_for(state="visible", timeout=timeout)
                         logging.info(f"   ✔ [检测成功] 发现可见的 '{text}' 按钮，准备点击。")
                         await locator.click(force=True)
                         logging.info(f"   ✔ [点击成功] 已点击 '{text}' 按钮。")
-                        await asyncio.sleep(1.5)
+                        await asyncio.sleep(1.5)  # 点击后短暂等待，让UI响应
                     except Exception:
                         logging.info(f"   - [未检测到] 未在 {timeout}ms 内发现 '{text}' 按钮，跳过。")
                 
-                logging.info("--- 开始检查并关闭引导弹窗 ---")
-                await click_if_present("我知道了")
-                await click_if_present("跳过")
+                logging.info("--- 开始检查并关闭引导/确认弹窗 ---")
+
+                # 1. 检查并点击 “知道了” 按钮
+                await click_if_present("知道了")
                 
+                # 2. 检查并点击 “去体验” 按钮（保留其特定的定位和点击逻辑）
                 try:
                     logging.info("   - 正在检查是否存在 '去体验' 按钮...")
                     go_experience_locators = page.locator('div.venus-button:has-text("去体验")')
                     if await go_experience_locators.count() > 0:
                         logging.info("   ✔ [检测成功] 发现 '去体验' 按钮，准备点击。")
+                        # 使用 dispatch_event('click') 可能对某些复杂的按钮更有效
                         await go_experience_locators.last.dispatch_event('click')
                         logging.info("   ✔ [点击成功] 已点击 '去体验' 按钮。")
                     else:
                         logging.info("   - [未检测到] 未发现 '去体验' 按钮。")
                 except Exception as e:
                     logging.warning(f"   - 点击 '去体验' 按钮时出现非致命错误: {e}")
+                
+                # 3. 检查并点击 “我知道了” 按钮
+                await click_if_present("我知道了")
                 
                 logging.info("--- 弹窗检查完毕，强制等待3秒以确保页面稳定 ---")
                 await page.wait_for_timeout(3000)
