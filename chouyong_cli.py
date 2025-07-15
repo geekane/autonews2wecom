@@ -784,6 +784,8 @@ class CliRunner:
 
                 # 1. 检查并点击 “知道了” 按钮
                 await click_if_present("知道了")
+                await asyncio.sleep(0.5)  # 短暂等待，防止点击无效
+                await click_if_present("我知道了")
                 
                 # 2. 检查并点击 “去体验” 按钮（保留其特定的定位和点击逻辑）
                 try:
