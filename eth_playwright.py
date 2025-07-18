@@ -136,7 +136,7 @@ def eth_report():
             price_float = float(price_cleaned)
             logging.info(f"转换后的价格 (float): {price_float}")
 
-            if price_float < 2100 or price_float > 3500:
+            if price_float < 2100 or price_float > 3800:
                 logging.info(f"价格 {price_float} 触发提醒条件 (< 2100 or > 3000)。准备发送提醒。")
                 message = f"当前价格: {eth_price_str}，已触发预警！"
                 send_wechat_message(access_token, message)
