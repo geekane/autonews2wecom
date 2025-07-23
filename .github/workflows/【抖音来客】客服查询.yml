@@ -1,10 +1,10 @@
 name: 【抖音来客】客服人员监控
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发
   schedule:
-    - cron: '0 0,8 * * *'
-    
+    - cron: '0 0,8 * * *' # 每天的 UTC 时间 0点 和 8点 运行
+
 jobs:
   run-monitor:
     runs-on: ubuntu-latest
@@ -17,7 +17,21 @@ jobs:
         uses: actions/checkout@v4
         
       - name: 安装依赖
-        run: pip install requests playwright==1.54.0
+        run: pip install requests # Playwright 已经由容器提供了，只需要安装 requests
 
       - name: 运行监控脚本
+        id: run-script # 给这个步骤一个ID，方便引用
         run: python 【抖音来客】客服人员查询.py
+        
+      # --- 以下是新增的步骤 ---
+      - name: 上传失败时的调试截图
+        # `if: failure()` 是关键，表示仅当之前的任何步骤失败时才执行此步骤
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          # 上传后的产物名称，你可以在 Actions 页面看到它
+          name: debug-screenshot 
+          # 要上传的文件路径，使用通配符 *.png 来匹配所有PNG截图
+          path: ./*.png
+          # 产物的保留天数，过期后会自动删除
+          retention-days: 7
