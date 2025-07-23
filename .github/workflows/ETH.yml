@@ -18,7 +18,7 @@ jobs:
 
       - name: 安装依赖
         run:
-          pip install playwright requests
+          pip install playwright==1.53.0 requests
           
       - name: 运行脚本
         env:
