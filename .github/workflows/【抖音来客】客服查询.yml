@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
         
       - name: 安装依赖
-        run: pip install requests # Playwright 已经由容器提供了，只需要安装 requests
+        run: pip install requests playwright==1.54.0
 
       - name: 运行监控脚本
         id: run-script # 给这个步骤一个ID，方便引用
