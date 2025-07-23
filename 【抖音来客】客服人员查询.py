@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import requests
+import time  # 导入 time 模块
 from playwright.async_api import async_playwright, TimeoutError
 
 # --- 配置日志 ---
@@ -13,7 +14,7 @@ logging.basicConfig(
 
 def send_wechat_notification(webhook_url, message):
     """发送企业微信机器人通知。"""
-    if not webhook_url in webhook_url:
+    if not webhook_url:
         logging.warning("未配置有效的企业微信 Webhook URL，跳过发送通知。")
         return
 
@@ -46,12 +47,14 @@ async def main():
     # --- 2. 检查 Cookie 文件 ---
     if not os.path.exists(cookie_file):
         logging.error(f"错误: Cookie 文件 '{cookie_file}' 未找到。")
+        send_wechat_notification(wechat_webhook_url, f"【抖音来客】脚本启动失败！\n\n错误信息: Cookie 文件 '{cookie_file}' 未找到。")
         return
 
     # --- 3. 启动 Playwright ---
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
+        page = None  # 提前声明 page 变量
 
         # --- 4. 加载 Cookies ---
         try:
@@ -60,35 +63,30 @@ async def main():
         except Exception as e:
             logging.error(f"加载 Cookie 文件失败: {e}")
             await browser.close()
+            send_wechat_notification(wechat_webhook_url, f"【抖音来客】脚本启动失败！\n\n错误信息: 加载 Cookie 文件失败: {e}")
             return
 
         # --- 5. 导航到页面并执行操作 ---
-        page = await context.new_page()
         try:
-            # 策略：先尝试导航一次，然后检查URL。如果被重定向，则进行第二次强制导航。
+            page = await context.new_page()
             
             logging.info(f"开始初次导航至目标网址，并等待网络空闲...")
             await page.goto(target_url, wait_until="networkidle", timeout=60000)
 
-            # 验证URL，如果被重定向，则进行校正导航
             if target_url not in page.url:
                 logging.warning(f"页面被重定向至: {page.url}。正在执行校正导航...")
                 await page.goto(target_url, wait_until="networkidle", timeout=60000)
 
             logging.info("页面加载流程完成，当前URL正确。")
 
-            # 定义关键元素定位器
             group_locator = page.locator(".optionsItemTitle-dWtHOi").filter(has_text="默认接待组")
 
-            # 点击目标群组 (Playwright会自动等待元素出现)
             logging.info("正在查找并点击'默认接待组' (自动等待最多15秒)...")
             await group_locator.click(timeout=15000)
             logging.info("✅ 已成功点击'默认接待组'。")
             
-            # 短暂等待展开动画
             await page.wait_for_timeout(2000)
 
-            # --- 提取当前客服名单 ---
             name_selector = "span.life-im-typography.life-im-typography-ellipsis.life-im-typography-text"
             scraped_names = sorted([name for name in await page.locator(name_selector).all_inner_texts() if "客服人数" not in name and name.strip() != ""])
 
@@ -109,17 +107,33 @@ async def main():
                     logging.info("客服名单与基准名单一致，无需通知。")
             else:
                 logging.warning("未能提取到任何客服姓名，请检查页面结构是否已更改。")
+                # 即使没提取到姓名也截个图，方便排查页面变化
+                screenshot_path = f"debug_screenshot_no_names_{int(time.time())}.png"
+                await page.screenshot(path=screenshot_path, full_page=True)
+                logging.info(f"已截取当前页面保存为 '{screenshot_path}'。")
+                send_wechat_notification(wechat_webhook_url, f"【抖音来客】脚本警告！\n\n未能提取到任何客服姓名，请检查页面结构。\n已保存截图: {screenshot_path}")
 
-        except TimeoutError as e:
-            error_msg = f"操作超时：在指定时间内页面未能加载或目标元素未出现。\n错误详情: {e}"
-            logging.error(error_msg)
-            screenshot_path = "error_screenshot.png"
-            await page.screenshot(path=screenshot_path)
-            logging.info(f"已截取当前页面保存为 '{screenshot_path}' 以便调试。")
-            send_wechat_notification(wechat_webhook_url, f"【抖音来客】脚本运行异常！\n\n错误信息: {error_msg}")
-        except Exception as e:
-            logging.error(f"页面操作过程中发生未知异常: {e}", exc_info=True)
-            send_wechat_notification(wechat_webhook_url, f"【抖音来客】脚本运行异常！\n\n错误信息: {e}")
+        except (TimeoutError, Exception) as e:
+            error_type = "操作超时" if isinstance(e, TimeoutError) else "未知异常"
+            error_msg = f"【抖音来客】脚本运行异常！\n\n错误类型: {error_type}\n错误详情: {e}"
+            logging.error(f"捕获到{error_type}: {e}", exc_info=True)
+            
+            # --- 核心的截图调试功能 ---
+            if page and not page.is_closed():
+                screenshot_path = f"error_screenshot_{int(time.time())}.png"
+                try:
+                    await page.screenshot(path=screenshot_path, full_page=True)
+                    logging.info(f"已截取当前页面保存为 '{screenshot_path}' 以便调试。")
+                    error_msg += f"\n\n📸 已保存截图: {screenshot_path}"
+                except Exception as screenshot_e:
+                    logging.error(f"尝试保存截图时发生错误: {screenshot_e}")
+                    error_msg += f"\n\n📸 截图失败: {screenshot_e}"
+            else:
+                logging.warning("Page 对象不存在或已关闭，无法进行截图。")
+                error_msg += "\n\n📸 截图失败，因页面实例不可用。"
+
+            send_wechat_notification(wechat_webhook_url, error_msg)
+
         finally:
             logging.info("操作流程结束，正在关闭浏览器...")
             await browser.close()
