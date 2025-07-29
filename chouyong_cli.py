@@ -802,8 +802,7 @@ class CliRunner:
                         await asyncio.sleep(0.5)  # 点击后短暂等待UI响应
                     except Exception:
                         logging.info(f"   - [未检测到] 未在 {timeout}ms 内发现 '{description}'，跳过。")
-
-                # 按照您指定的顺序，依次调用新的函数来关闭各种弹窗/引导
+                        
                 # 1. 点击“关闭”
                 await click_dynamic_poptip_button("关闭")
 
@@ -836,7 +835,7 @@ class CliRunner:
                 
                 logging.info("   - 开始执行数据导出...")
                 async with page.expect_download(timeout=30000) as download_info:
-                    await page.get_by_role("button", name="导出数据").click()
+                    await page.get_by_role("button", name="导出数据").click(force=True)
                 
                 download = await download_info.value
                 os.makedirs(download_dir, exist_ok=True)
@@ -875,16 +874,10 @@ class CliRunner:
 # ==============================================================================
 async def main():
     runner = CliRunner()
-    
     await runner.task_sync_life_data()
-    
     await runner.task_sync_feishu_ids()
-    
     await runner.task_get_commission()
-
-    await runner.task_set_commission()
-    
+    await runner.task_set_commission() 
     logging.info("\n所有任务执行完毕。")
-
 if __name__ == "__main__":
     asyncio.run(main())
