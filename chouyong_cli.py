@@ -791,12 +791,7 @@ class CliRunner:
                     description = f"引导弹窗中含 '{text_to_click}' 的按钮"
                     logging.info(f"   - 正在检查并点击: {description}...")
                     try:
-                        # 核心定位逻辑：
-                        # 1. `div[id^='venus_poptip_']` 匹配所有ID以'venus_poptip_'开头的div元素 (弹窗容器)
-                        # 2. `.get_by_text(text_to_click, exact=True)` 在这些容器中查找文本完全匹配的按钮
-                        # 3. `.first` 明确指定只操作找到的第一个元素
                         locator = page.locator(f"div[id^='venus_poptip_']").get_by_text(text_to_click, exact=True).first
-                        
                         await locator.click(timeout=timeout)
                         logging.info(f"   ✔ [点击成功] 已点击 '{description}'。")
                         await asyncio.sleep(0.5)  # 点击后短暂等待UI响应
