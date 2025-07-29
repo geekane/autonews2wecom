@@ -40,7 +40,6 @@ logging.basicConfig(
     ]
 )
 
-
 class CliRunner:
     def __init__(self):
         self.configs = self.load_configs()
