@@ -780,33 +780,47 @@ class CliRunner:
                     except Exception:
                         logging.info(f"   - [未检测到] 未在 {timeout}ms 内发现 '{text}' 按钮，跳过。")
                 
-                logging.info("--- 开始检查并关闭引导/确认弹窗 ---")
+                logging.info("--- 开始按顺序、灵活地处理引导/确认弹窗 ---")
 
-                # 1. 检查并点击 “知道了” 按钮
-                await click_if_present("知道了")
-                await asyncio.sleep(0.5)  # 短暂等待，防止点击无效
-                await click_if_present("我知道了")
+                async def click_dynamic_poptip_button(text_to_click: str, timeout: int = 3000):
+                    """
+                    在所有ID以 'venus_poptip_' 开头的弹窗中，
+                    查找并点击第一个包含指定文本的按钮。
+                    这种方式可以应对弹窗ID动态变化的情况。
+                    """
+                    description = f"引导弹窗中含 '{text_to_click}' 的按钮"
+                    logging.info(f"   - 正在检查并点击: {description}...")
+                    try:
+                        # 核心定位逻辑：
+                        # 1. `div[id^='venus_poptip_']` 匹配所有ID以'venus_poptip_'开头的div元素 (弹窗容器)
+                        # 2. `.get_by_text(text_to_click, exact=True)` 在这些容器中查找文本完全匹配的按钮
+                        # 3. `.first` 明确指定只操作找到的第一个元素
+                        locator = page.locator(f"div[id^='venus_poptip_']").get_by_text(text_to_click, exact=True).first
+                        
+                        await locator.click(timeout=timeout)
+                        logging.info(f"   ✔ [点击成功] 已点击 '{description}'。")
+                        await asyncio.sleep(0.5)  # 点击后短暂等待UI响应
+                    except Exception:
+                        logging.info(f"   - [未检测到] 未在 {timeout}ms 内发现 '{description}'，跳过。")
+
+                # 按照您指定的顺序，依次调用新的函数来关闭各种弹窗/引导
+                # 1. 点击“关闭”
+                await click_dynamic_poptip_button("关闭")
+
+                # 2. 点击“跳过”
+                await click_dynamic_poptip_button("跳过")
+
+                # 3. 点击“我知道了”
+                await click_dynamic_poptip_button("我知道了")
                 
-                # 2. 检查并点击 “去体验” 按钮（保留其特定的定位和点击逻辑）
-                try:
-                    logging.info("   - 正在检查是否存在 '去体验' 按钮...")
-                    go_experience_locators = page.locator('div.venus-button:has-text("去体验")')
-                    if await go_experience_locators.count() > 0:
-                        logging.info("   ✔ [检测成功] 发现 '去体验' 按钮，准备点击。")
-                        # 使用 dispatch_event('click') 可能对某些复杂的按钮更有效
-                        await go_experience_locators.last.dispatch_event('click')
-                        logging.info("   ✔ [点击成功] 已点击 '去体验' 按钮。")
-                    else:
-                        logging.info("   - [未检测到] 未发现 '去体验' 按钮。")
-                except Exception as e:
-                    logging.warning(f"   - 点击 '去体验' 按钮时出现非致命错误: {e}")
-                
-                # 3. 检查并点击 “我知道了” 按钮
-                await click_if_present("我知道了")
-                
+                # 为保险起见，可以额外处理一下通用的“知道了”按钮
+                await click_dynamic_poptip_button("知道了")
+
+
                 logging.info("--- 弹窗检查完毕，强制等待3秒以确保页面稳定 ---")
                 await page.wait_for_timeout(3000)
 
+                # 保留您原来的调试截图逻辑，这非常有用
                 screenshot_path_before_export = os.path.join(DEBUG_DIR, f"debug_before_export_click_{datetime.now().strftime('%H%M%S')}.png")
                 await page.screenshot(path=screenshot_path_before_export, full_page=True)
                 logging.info(f"   - [调试截图] 已保存点击“导出数据”前的页面截图至: {screenshot_path_before_export}")
