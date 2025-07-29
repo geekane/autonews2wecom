@@ -810,7 +810,7 @@ class CliRunner:
                 await click_dynamic_poptip_button("跳过")
 
                 # 3. 点击“我知道了”
-                await click_text_anywhere_on_page("知道了")
+                await click_text_anywhere_on_page("我知道了")
 
                 logging.info("--- 弹窗检查完毕，强制等待3秒以确保页面稳定 ---")
                 await page.wait_for_timeout(3000)
