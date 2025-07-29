@@ -810,7 +810,14 @@ class CliRunner:
                 await click_dynamic_poptip_button("跳过")
 
                 # 3. 点击“我知道了”
-                await click_text_anywhere_on_page("我知道了")
+                logging.info("   - 正在强制点击文本 '我知道了'...")
+                try:
+                    # 这就是最直接的调用：定位页面上第一个精确匹配的文本，然后强制点击它
+                    await page.get_by_text("我知道了", exact=True).first.click(timeout=3000, force=True)
+                    logging.info("   ✔ [点击成功] 已强制点击 '我知道了'。")
+                    await asyncio.sleep(0.8) # 短暂等待UI响应
+                except Exception:
+                    logging.info("   - [未检测到] 未发现 '我知道了'，跳过。")
 
                 logging.info("--- 弹窗检查完毕，强制等待3秒以确保页面稳定 ---")
                 await page.wait_for_timeout(3000)
