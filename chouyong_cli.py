@@ -816,7 +816,6 @@ class CliRunner:
                 # 为保险起见，可以额外处理一下通用的“知道了”按钮
                 await click_dynamic_poptip_button("知道了")
 
-
                 logging.info("--- 弹窗检查完毕，强制等待3秒以确保页面稳定 ---")
                 await page.wait_for_timeout(3000)
 
@@ -828,7 +827,7 @@ class CliRunner:
                 try:
                     logging.info("   - 正在点击“全部门店”数据按钮...")
                     # 使用 locator 定位到 ID 为 PoiTopRankActionAllStore 的元素并执行点击
-                    await page.locator("#PoiTopRankActionAllStore").click(timeout=10000) # 增加10秒超时
+                    await page.locator("#PoiTopRankActionAllStore").click(timeout=10000, force=True)
                     logging.info("   ✔ [点击成功] 已点击“全部门店”按钮。")
                     # 点击后建议增加一个短暂的等待，以确保数据完全加载出来
                     await page.wait_for_timeout(3000) # 等待3秒
