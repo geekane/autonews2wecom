@@ -811,6 +811,16 @@ class CliRunner:
                 await page.screenshot(path=screenshot_path_before_export, full_page=True)
                 logging.info(f"   - [调试截图] 已保存点击“导出数据”前的页面截图至: {screenshot_path_before_export}")
 
+                try:
+                    logging.info("   - 正在点击“全部门店”数据按钮...")
+                    # 使用 locator 定位到 ID 为 PoiTopRankActionAllStore 的元素并执行点击
+                    await page.locator("#PoiTopRankActionAllStore").click(timeout=10000) # 增加10秒超时
+                    logging.info("   ✔ [点击成功] 已点击“全部门店”按钮。")
+                    # 点击后建议增加一个短暂的等待，以确保数据完全加载出来
+                    await page.wait_for_timeout(3000) # 等待3秒
+                except Exception as e:
+                    logging.error(f"   ❌ [点击失败] 点击“全部门店”按钮时出错: {e}")
+                
                 logging.info("   - 开始执行数据导出...")
                 async with page.expect_download(timeout=30000) as download_info:
                     await page.get_by_role("button", name="导出数据").click()
