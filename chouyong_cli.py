@@ -108,10 +108,8 @@ class CliRunner:
         """
         【新增功能】从指定的飞书表格中获取所有门店的POI ID。
         """
-        # 根据用户提供的URL: https://xxmdlvta34m.feishu.cn/base/MslRbdwPca7P6qsqbqgcvpBGnRh?table=tblyKop71MJbXThq...
         poi_app_token = "MslRbdwPca7P6qsqbqgcvpBGnRh"
         poi_table_id = "tblyKop71MJbXThq"
-        # 根据截图，字段名为"ID"
         poi_id_field_name = "ID"
 
         logging.info(f"开始从飞书POI表格 (Table ID: {poi_table_id}) 获取门店POI ID...")
@@ -362,12 +360,10 @@ class CliRunner:
         logging.info("=====================================================")
         logging.info("========== 开始执行步骤3: 批量设置新佣金 ==========")
         logging.info("=====================================================")
-        # 1. 初始化飞书客户端
         if not self._init_feishu_client():
             return
 
         try:
-            # 2. 从飞书获取“抽佣比例”为空的记录
             tasks_to_process = await self._get_empty_commission_records_from_feishu()
             
             if tasks_to_process is None:
@@ -382,9 +378,7 @@ class CliRunner:
             successful_sets = 0
             failed_sets = 0
 
-            # 3. 启动Playwright浏览器，执行设置操作
             async with async_playwright() as p:
-                # 强制使用无头模式，适合服务器环境
                 browser = await p.chromium.launch(headless=True)
                 
                 if not os.path.exists(COOKIE_FILE):
@@ -395,7 +389,6 @@ class CliRunner:
                 base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId=7241078611527075855&orderId=7521772903543900206&queryScene=0&skuOrderId=7521772903543916590&tabName=ChargeSetting"
                 await page.goto(base_url, timeout=90000, wait_until="domcontentloaded")
                 
-                # 4. 遍历从飞书获取的任务
                 for i, task in enumerate(tasks_to_process):
                     pid = task["id"]
                     logging.info(f"--- [进度 {i+1}/{len(tasks_to_process)}] 开始处理商品ID: {pid} ---")
@@ -416,18 +409,14 @@ class CliRunner:
                 
                 await browser.close()
             
-            # 发送企业微信通知
             if successful_sets > 0:
                 await asyncio.to_thread(self._send_wechat_notification, successful_sets)
             
-            # 将 messagebox 替换为 logging
             logging.info(f"\n所有佣金设置任务处理完成！成功: {successful_sets}, 失败: {failed_sets}")
 
         except Exception as e:
-            # 将 messagebox 替换为 logging
             logging.error(f"设置佣金任务主线程发生严重错误: {e}", exc_info=True)
         finally:
-            # 移除 set_ui_state 并确保飞书客户端被清理
             if self.feishu_client:
                 self.feishu_client = None
             logging.info("\n步骤3执行完毕。")
@@ -444,7 +433,6 @@ class CliRunner:
             await input_field.clear(); await input_field.fill(str(product_id))
             await page.get_by_test_id("查询").click()
 
-            # 定位到搜索结果的第一行，以确保点击正确的按钮
             first_row_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first
             set_commission_button = first_row_locator.get_by_role("button", name="设置佣金")
             await expect(set_commission_button).to_be_visible(timeout=15000)
@@ -452,12 +440,10 @@ class CliRunner:
             logging.info("  - 步骤2: 打开弹窗...")
             await set_commission_button.click()
             
-            # 获取弹窗本身的定位器
             popup_title = page.get_by_text("设置佣金比例", exact=True)
             await expect(popup_title).to_be_visible(timeout=10000)
 
             logging.info("  - 步骤3: 填写佣金...")
-            # --- 严格遵循您提供的输入框定位逻辑，保持原样 ---
             for label, value in commission_values.items():
                 regex_pattern = re.compile(f"^{label}%$")
                 input_locator = page.locator("div").filter(has_text=regex_pattern).get_by_placeholder("请输入")
@@ -466,7 +452,6 @@ class CliRunner:
                 logging.info(f"    - '{label}' 已设置为 '{value}%'")
             
             logging.info("  - 步骤4: 提交...")
-            # 在弹窗内查找提交按钮
             submit_button = page.get_by_role("button", name="提交审核")
             await submit_button.click()
             await expect(popup_title).to_be_hidden(timeout=15000)
@@ -478,17 +463,14 @@ class CliRunner:
             error_msg = str(e).split('\n')[0]
             logging.error(f"  ❌ [失败] 为ID {product_id} 设置佣金时出错: {error_msg}", exc_info=False)
             try:
-                # 将截图保存到 debug_artifacts 目录
                 screenshot_path = os.path.join(DEBUG_DIR, f"error_set_commission_{product_id}_{int(time.time())}.png")
                 await page.screenshot(path=screenshot_path)
                 logging.info(f"  - 错误截图已保存至: {screenshot_path}")
             except Exception as screenshot_error:
                 logging.error(f"  - 尝试保存错误截图失败: {screenshot_error}")
             
-            # 【健壮性改进】增加错误处理，尝试关闭弹窗以恢复页面状态
             try:
                 logging.info("  - 发生错误，尝试关闭弹窗以继续下一个任务...")
-                # 优先按 Escape 键，因为它更通用
                 await page.keyboard.press("Escape")
                 await page.wait_for_timeout(500)
                 logging.info("  - 已尝试通过按 'Escape' 键关闭弹窗。")
@@ -552,12 +534,10 @@ class CliRunner:
                 logging.error("无法从飞书获取现有数据，任务中止。")
                 return
 
-            # --- 修改开始: 从飞书API获取POI ID，替换原来的Excel读取方式 ---
             poi_ids = self._get_poi_ids_from_feishu_table()
             if not poi_ids:
                 logging.error("任务中止，因为未能从飞书获取到任何POI ID。请检查相关表格和配置。")
                 return
-            # --- 修改结束 ---
 
             poi_batch_size = self.configs.get('poi_batch_size', 20)
             total_poi_batches = (len(poi_ids) + poi_batch_size - 1) // poi_batch_size
@@ -725,7 +705,10 @@ class CliRunner:
             logging.error(f"❌ [飞书错误] 写入记录时发生异常: {traceback.format_exc()}")
             return False
 
-async def task_sync_life_data(self):
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★★★  【修正点】将下面的函数整体缩进，作为 CliRunner 的方法  ★★★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    async def task_sync_life_data(self):
         """
         步骤0：登录 life-data.cn，导出数据，并将其同步到指定的飞书表格。
         (此版本优化了弹窗处理和错误截图逻辑)
@@ -831,7 +814,7 @@ async def task_sync_life_data(self):
                 await browser.close()
                 logging.info("   - 浏览器已关闭。")
 
-        # --- 将数据同步到飞书的逻辑保持不变 ---
+        # --- 将数据同步到飞书的逻辑 ---
         if downloaded_df is not None and not downloaded_df.empty:
             logging.info("\n--- 开始同步数据至飞书 ---")
             existing_ids = await self._fs_list_all_record_ids(feishu_config['app_token'], feishu_config['table_id'])
@@ -844,6 +827,9 @@ async def task_sync_life_data(self):
             
         logging.info("\n步骤0执行完毕。")
 
+# ==============================================================================
+# 程序主入口
+# ==============================================================================
 async def main():
     runner = CliRunner()
     await runner.task_sync_life_data()
@@ -851,5 +837,6 @@ async def main():
     await runner.task_get_commission()
     await runner.task_set_commission() 
     logging.info("\n所有任务执行完毕。")
+
 if __name__ == "__main__":
     asyncio.run(main())
