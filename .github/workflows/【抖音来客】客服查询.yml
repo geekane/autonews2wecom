@@ -20,18 +20,14 @@ jobs:
         run: pip install requests playwright==1.54.0
 
       - name: 运行监控脚本
-        id: run-script # 给这个步骤一个ID，方便引用
+        id: run-script
         run: python 【抖音来客】客服人员查询.py
         
-      # --- 以下是新增的步骤 ---
       - name: 上传失败时的调试截图
-        # `if: failure()` 是关键，表示仅当之前的任何步骤失败时才执行此步骤
+        # 这个条件现在可以正确工作了，因为脚本在失败时会返回非零退出码
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          # 上传后的产物名称，你可以在 Actions 页面看到它
           name: debug-screenshot 
-          # 要上传的文件路径，使用通配符 *.png 来匹配所有PNG截图
           path: ./*.png
-          # 产物的保留天数，过期后会自动删除
           retention-days: 7
