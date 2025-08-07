@@ -557,7 +557,16 @@ class CliRunner:
             # 假设您有删除和增加记录的逻辑
         else:
             logging.warning("   - 未获取到有效数据，已跳过飞书同步步骤。")
-            
+
+        if downloaded_df is not None and not downloaded_df.empty:
+            logging.info("\n--- 开始同步数据至飞书 ---")
+            existing_ids = await self._fs_list_all_record_ids(feishu_config['app_token'], feishu_config['table_id'])
+            if existing_ids is not None:
+                delete_ok = await self._fs_batch_delete_records(feishu_config['app_token'], feishu_config['table_id'], existing_ids)
+                if delete_ok:
+                    await self._fs_batch_add_records(feishu_config['app_token'], feishu_config['table_id'], downloaded_df)
+        else:
+            logging.warning("   - 未获取到有效数据，已跳过飞书同步步骤。")           
         logging.info("\n步骤0执行完毕。")
 
     # ==============================================================================
