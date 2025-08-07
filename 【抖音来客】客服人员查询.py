@@ -3,7 +3,9 @@ import json
 import logging
 import os
 import requests
-import time  # 导入 time 模块
+import sys  # 【新增】导入 sys 模块，用于控制脚本退出状态
+import time
+
 from playwright.async_api import async_playwright, TimeoutError
 
 # --- 配置日志 ---
@@ -47,8 +49,9 @@ async def main():
     # --- 2. 检查 Cookie 文件 ---
     if not os.path.exists(cookie_file):
         logging.error(f"错误: Cookie 文件 '{cookie_file}' 未找到。")
+        # 如果启动时关键文件就缺失，可以考虑发送通知并以失败状态退出
         send_wechat_notification(wechat_webhook_url, f"【抖音来客】脚本启动失败！\n\n错误信息: Cookie 文件 '{cookie_file}' 未找到。")
-        return
+        sys.exit(1)
 
     # --- 3. 启动 Playwright ---
     async with async_playwright() as p:
@@ -62,9 +65,9 @@ async def main():
                 await context.add_cookies(json.load(f)['cookies'])
         except Exception as e:
             logging.error(f"加载 Cookie 文件失败: {e}")
-            await browser.close()
             send_wechat_notification(wechat_webhook_url, f"【抖音来客】脚本启动失败！\n\n错误信息: 加载 Cookie 文件失败: {e}")
-            return
+            await browser.close()
+            sys.exit(1)
 
         # --- 5. 导航到页面并执行操作 ---
         try:
@@ -107,36 +110,38 @@ async def main():
                     logging.info("客服名单与基准名单一致，无需通知。")
             else:
                 logging.warning("未能提取到任何客服姓名，请检查页面结构是否已更改。")
-                # 即使没提取到姓名也截个图，方便排查页面变化
                 screenshot_path = f"debug_screenshot_no_names_{int(time.time())}.png"
                 await page.screenshot(path=screenshot_path, full_page=True)
                 logging.info(f"已截取当前页面保存为 '{screenshot_path}'。")
+                # 这种属于警告，但也算是一种失败场景，所以也以失败状态退出以触发截图上传
                 send_wechat_notification(wechat_webhook_url, f"【抖音来客】脚本警告！\n\n未能提取到任何客服姓名，请检查页面结构。\n已保存截图: {screenshot_path}")
+                sys.exit(1)
 
         except (TimeoutError, Exception) as e:
             error_type = "操作超时" if isinstance(e, TimeoutError) else "未知异常"
-            error_msg = f"【抖音来客】脚本运行异常！\n\n错误类型: {error_type}\n错误详情: {e}"
             logging.error(f"捕获到{error_type}: {e}", exc_info=True)
             
-            # --- 核心的截图调试功能 ---
             if page and not page.is_closed():
                 screenshot_path = f"error_screenshot_{int(time.time())}.png"
                 try:
                     await page.screenshot(path=screenshot_path, full_page=True)
                     logging.info(f"已截取当前页面保存为 '{screenshot_path}' 以便调试。")
-                    error_msg += f"\n\n📸 已保存截图: {screenshot_path}"
                 except Exception as screenshot_e:
                     logging.error(f"尝试保存截图时发生错误: {screenshot_e}")
-                    error_msg += f"\n\n📸 截图失败: {screenshot_e}"
             else:
                 logging.warning("Page 对象不存在或已关闭，无法进行截图。")
-                error_msg += "\n\n📸 截图失败，因页面实例不可用。"
 
-            send_wechat_notification(wechat_webhook_url, error_msg)
+            # 【修改】移除此处的企业微信通知调用，因为我们不希望在失败时收到通知
+            # send_wechat_notification(wechat_webhook_url, error_msg)
+
+            # 【新增】以非零退出码结束程序，这会告诉 GitHub Actions 当前步骤是“失败”的
+            sys.exit(1)
 
         finally:
             logging.info("操作流程结束，正在关闭浏览器...")
-            await browser.close()
+            # 【优化】增加检查，确保 browser 对象有效
+            if 'browser' in locals() and browser.is_connected():
+                await browser.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
