@@ -56,7 +56,7 @@ class CliRunner:
             sys.exit(1)
 
     # ==============================================================================
-    # 通用及步骤2的辅助函数
+    # 通用及辅助函数
     # ==============================================================================
 
     def _init_feishu_client(self):
@@ -91,67 +91,38 @@ class CliRunner:
             logging.error(f"请求抖音Token时出错: {e}")
             return False
 
-    def _load_poi_ids_from_excel(self, file_path):
-        try:
-            df = pd.read_excel(file_path, header=0, usecols=[0], dtype=str)
-            poi_ids = df.iloc[:, 0].dropna().astype(str).str.strip().tolist()
-            if not poi_ids:
-                logging.error(f"未能从Excel文件 '{file_path}' 的第一列读取到任何POI ID。")
-                return []
-            logging.info(f"成功从 '{file_path}' 加载 {len(poi_ids)} 个POI ID。")
-            return poi_ids
-        except Exception as e:
-            logging.error(f"读取Excel '{file_path}' 时出错: {e}")
-            return []
-
     def _get_poi_ids_from_feishu_table(self):
         poi_app_token = "MslRbdwPca7P6qsqbqgcvpBGnRh"
         poi_table_id = "tblyKop71MJbXThq"
         poi_id_field_name = "ID"
-
         logging.info(f"开始从飞书POI表格 (Table ID: {poi_table_id}) 获取门店POI ID...")
-
         if not self.feishu_client:
             logging.error("飞书客户端未初始化，无法获取POI ID。")
             return []
-
         all_poi_ids = []
         page_token = None
         while True:
             try:
                 request_body = SearchAppTableRecordRequestBody.builder().field_names([poi_id_field_name]).build()
                 request_builder = SearchAppTableRecordRequest.builder().app_token(poi_app_token).table_id(poi_table_id).page_size(500).request_body(request_body)
-
-                if page_token:
-                    request_builder.page_token(page_token)
-
+                if page_token: request_builder.page_token(page_token)
                 request = request_builder.build()
                 response = self.feishu_client.bitable.v1.app_table_record.search(request)
-
                 if not response.success():
                     logging.error(f"查询飞书POI表格失败: Code={response.code}, Msg={response.msg}")
                     return []
-
                 items = response.data.items or []
                 for item in items:
                     if poi_id_field_name in item.fields and item.fields[poi_id_field_name]:
                         poi_id_text = item.fields[poi_id_field_name][0].get('text', '')
-                        if poi_id_text:
-                            all_poi_ids.append(poi_id_text.strip())
-
-                if response.data.has_more:
-                    page_token = response.data.page_token
-                else:
-                    break
-
+                        if poi_id_text: all_poi_ids.append(poi_id_text.strip())
+                if response.data.has_more: page_token = response.data.page_token
+                else: break
             except Exception as e:
                 logging.error(f"查询飞书POI表格时发生异常: {e}", exc_info=True)
                 return []
-
-        if not all_poi_ids:
-            logging.error(f"未能从飞书表格 '{poi_table_id}' 的 '{poi_id_field_name}' 列读取到任何POI ID。")
-        else:
-            logging.info(f"成功从飞书获取到 {len(all_poi_ids)} 个门店POI ID。")
+        if not all_poi_ids: logging.error(f"未能从飞书表格 '{poi_table_id}' 的 '{poi_id_field_name}' 列读取到任何POI ID。")
+        else: logging.info(f"成功从飞书获取到 {len(all_poi_ids)} 个门店POI ID。")
         return all_poi_ids
 
     def _query_douyin_online_products(self, params):
@@ -176,9 +147,9 @@ class CliRunner:
 
     def _get_all_product_ids_for_poi(self, poi_id, account_id):
         all_product_ids = set()
-        current_cursor, page = "", 1
+        current_cursor, page_num = "", 1
         while True:
-            logging.info(f"    查询POI[{poi_id}] 第 {page} 页...")
+            logging.info(f"    查询POI[{poi_id}] 第 {page_num} 页...")
             params = {"account_id": account_id, "poi_ids": [poi_id], "count": 50, "cursor": current_cursor}
             result = self._query_douyin_online_products(params)
             if result.get("success"):
@@ -186,7 +157,7 @@ class CliRunner:
                     if product_id_val := p_info.get("product", {}).get("product_id"):
                         all_product_ids.add(str(product_id_val))
                 if result.get("has_more"):
-                    current_cursor, page = result.get("next_cursor", ""), page + 1
+                    current_cursor, page_num = result.get("next_cursor", ""), page_num + 1
                     time.sleep(0.2)
                 else:
                     break
@@ -212,7 +183,7 @@ class CliRunner:
         except Exception as e:
             logging.error(f"写入飞书时发生未知错误: {e}", exc_info=True)
             return {"success": False, "message": f"未知错误: {e}"}
-            
+
     def _get_all_existing_product_ids_from_feishu(self):
         field_name = self.configs['feishu_field_name']
         logging.info(f"开始从飞书获取已存在的商品ID，目标列: '{field_name}'...")
@@ -222,8 +193,7 @@ class CliRunner:
             try:
                 request_body = SearchAppTableRecordRequestBody.builder().field_names([field_name]).build()
                 request_builder = SearchAppTableRecordRequest.builder().app_token(self.configs['feishu_app_token']).table_id(self.configs['feishu_table_id']).page_size(500).request_body(request_body)
-                if page_token:
-                    request_builder.page_token(page_token)
+                if page_token: request_builder.page_token(page_token)
                 request = request_builder.build()
                 response = self.feishu_client.bitable.v1.app_table_record.search(request)
                 if not response.success():
@@ -233,21 +203,14 @@ class CliRunner:
                 for item in items:
                     if field_name in item.fields and item.fields[field_name]:
                         product_id_text = item.fields[field_name][0].get('text', '')
-                        if product_id_text:
-                            existing_ids.add(product_id_text.strip())
-                if response.data.has_more:
-                    page_token = response.data.page_token
-                else:
-                    break
+                        if product_id_text: existing_ids.add(product_id_text.strip())
+                if response.data.has_more: page_token = response.data.page_token
+                else: break
             except Exception as e:
                 logging.error(f"查询飞书现有记录时发生异常: {e}", exc_info=True)
                 return None
         logging.info(f"成功从飞书获取到 {len(existing_ids)} 个已存在的商品ID。")
         return existing_ids
-
-    # ==============================================================================
-    # 步骤3的辅助函数
-    # ==============================================================================
 
     async def _get_empty_commission_records_from_feishu(self):
         source_field = self.configs["get_commission_source_field"]
@@ -261,8 +224,7 @@ class CliRunner:
                 filter_obj = FilterInfo.builder().conjunction("and").conditions([filter_condition]).build()
                 request_body = SearchAppTableRecordRequestBody.builder().field_names([source_field]).filter(filter_obj).build()
                 request_builder = SearchAppTableRecordRequest.builder().app_token(self.configs['feishu_app_token']).table_id(self.configs['feishu_table_id']).page_size(500).request_body(request_body)
-                if page_token:
-                    request_builder.page_token(page_token)
+                if page_token: request_builder.page_token(page_token)
                 request = request_builder.build()
                 response = self.feishu_client.bitable.v1.app_table_record.search(request)
                 if not response.success():
@@ -272,12 +234,9 @@ class CliRunner:
                 for item in items:
                     if source_field in item.fields and item.fields[source_field]:
                         product_id_text = item.fields[source_field][0].get('text', '')
-                        if product_id_text:
-                           all_records.append({"id": product_id_text, "record_id": item.record_id})
-                if response.data.has_more:
-                    page_token = response.data.page_token
-                else: 
-                    break
+                        if product_id_text: all_records.append({"id": product_id_text, "record_id": item.record_id})
+                if response.data.has_more: page_token = response.data.page_token
+                else: break
             except Exception as e:
                 logging.error(f"查询飞书记录时发生异常: {e}", exc_info=True)
                 return None
@@ -296,30 +255,23 @@ class CliRunner:
         except Exception as e:
             logging.error(f"更新飞书记录 {record_id} 时发生异常: {e}", exc_info=True)
             return False
-            
+
     async def _process_id_on_page(self, page, product_id, max_retries, retry_delay):
         for attempt in range(max_retries + 1):
             try:
-                if attempt > 0:
-                    logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次尝试...")
-                
+                if attempt > 0: logging.info(f"    -> [ID: {product_id}] 第 {attempt + 1}/{max_retries + 1} 次尝试...")
                 input_field = page.get_by_role("textbox", name="商品名称/ID")
                 await expect(input_field).to_be_visible(timeout=20000)
                 await input_field.clear()
                 await input_field.fill(str(product_id))
-                
                 await page.get_by_test_id("查询").click()
-                
                 id_in_result_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first.get_by_text(str(product_id), exact=True)
                 await expect(id_in_result_locator).to_be_visible(timeout=30000)
-                
                 commission_status_locator = page.locator(".okee-lp-Table-Cell > .lp-flex > .okee-lp-tag").first
                 await expect(commission_status_locator).to_be_visible(timeout=15000)
-                
                 status_text = (await commission_status_locator.text_content() or "").strip()
                 status_result = "已设置" if status_text == "已设置" else f"未设置 ({status_text})"
                 commission_info = "未找到"
-                
                 if status_result == "已设置":
                     channel_info_locator = page.locator("div.lp-flex.lp-items-center:has-text('%')").first
                     try:
@@ -328,9 +280,7 @@ class CliRunner:
                     except Exception:
                         logging.warning(f"    ! [ID: {product_id}] 状态为'已设置'但未找到佣金比例详情。")
                         commission_info = "已设置但无详细比例"
-                        
                 return status_result, commission_info
-
             except Exception as e:
                 error_msg = str(e).splitlines()[0]
                 logging.warning(f"    ! [ID: {product_id}] 第 {attempt + 1} 次尝试失败: {error_msg}")
@@ -346,73 +296,7 @@ class CliRunner:
                     except Exception as screenshot_error:
                         logging.error(f"      尝试保存最终失败截图失败: {screenshot_error}")
                     return "查询失败", error_msg
-
         return "查询失败", "未知错误"
-
-    async def task_set_commission(self):
-        logging.info("=====================================================")
-        logging.info("========== 开始执行步骤3: 批量设置新佣金 ==========")
-        logging.info("=====================================================")
-        if not self._init_feishu_client():
-            return
-
-        try:
-            tasks_to_process = await self._get_empty_commission_records_from_feishu()
-            
-            if tasks_to_process is None:
-                logging.error("飞书错误: 从飞书获取待处理记录失败，请检查日志。")
-                return
-            if not tasks_to_process:
-                logging.info("任务提示: 未在飞书中找到需要设置佣金的记录。")
-                return
-
-            logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条需要设置佣金的记录。")
-
-            successful_sets = 0
-            failed_sets = 0
-
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                
-                if not os.path.exists(COOKIE_FILE):
-                    raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。")
-                context = await browser.new_context(storage_state=COOKIE_FILE)
-                page = await context.new_page()
-                
-                base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId=7241078611527075855&orderId=7521772903543900206&queryScene=0&skuOrderId=7521772903543916590&tabName=ChargeSetting"
-                await page.goto(base_url, timeout=90000, wait_until="domcontentloaded")
-                
-                for i, task in enumerate(tasks_to_process):
-                    pid = task["id"]
-                    logging.info(f"--- [进度 {i+1}/{len(tasks_to_process)}] 开始处理商品ID: {pid} ---")
-                    
-                    commission_values = {
-                        '线上经营': self.configs.get('commission_online', '0'),
-                        '线下扫码': self.configs.get('commission_offline', '0'),
-                        '增量宝': self.configs.get('commission_zengliang', '0'),
-                        '职人账号': self.configs.get('commission_zhiren', '0')
-                    }
-                    
-                    success = await self._set_single_commission(page, pid, commission_values)
-                    
-                    if success:
-                        successful_sets += 1
-                    else:
-                        failed_sets += 1
-                
-                await browser.close()
-            
-            if successful_sets > 0:
-                await asyncio.to_thread(self._send_wechat_notification, successful_sets)
-            
-            logging.info(f"\n所有佣金设置任务处理完成！成功: {successful_sets}, 失败: {failed_sets}")
-
-        except Exception as e:
-            logging.error(f"设置佣金任务主线程发生严重错误: {e}", exc_info=True)
-        finally:
-            if self.feishu_client:
-                self.feishu_client = None
-            logging.info("\n步骤3执行完毕。")
 
     async def _set_single_commission(self, page, product_id, commission_values):
         try:
@@ -421,17 +305,13 @@ class CliRunner:
             await expect(input_field).to_be_visible(timeout=20000)
             await input_field.clear(); await input_field.fill(str(product_id))
             await page.get_by_test_id("查询").click()
-
             first_row_locator = page.locator(".okee-lp-Table-Body .okee-lp-Table-Row").first
             set_commission_button = first_row_locator.get_by_role("button", name="设置佣金")
             await expect(set_commission_button).to_be_visible(timeout=15000)
-            
             logging.info("  - 步骤2: 打开弹窗...")
             await set_commission_button.click()
-            
             popup_title = page.get_by_text("设置佣金比例", exact=True)
             await expect(popup_title).to_be_visible(timeout=10000)
-
             logging.info("  - 步骤3: 填写佣金...")
             for label, value in commission_values.items():
                 regex_pattern = re.compile(f"^{label}%$")
@@ -439,15 +319,12 @@ class CliRunner:
                 await expect(input_locator).to_be_visible(timeout=5000)
                 await input_locator.fill(str(value))
                 logging.info(f"    - '{label}' 已设置为 '{value}%'")
-            
             logging.info("  - 步骤4: 提交...")
             submit_button = page.get_by_role("button", name="提交审核")
             await submit_button.click()
             await expect(popup_title).to_be_hidden(timeout=15000)
-            
             logging.info(f"  ✔ [成功] ID: {product_id} 设置成功。")
             return True
-        
         except Exception as e:
             error_msg = str(e).split('\n')[0]
             logging.error(f"  ❌ [失败] 为ID {product_id} 设置佣金时出错: {error_msg}", exc_info=False)
@@ -457,7 +334,6 @@ class CliRunner:
                 logging.info(f"  - 错误截图已保存至: {screenshot_path}")
             except Exception as screenshot_error:
                 logging.error(f"  - 尝试保存错误截图失败: {screenshot_error}")
-            
             try:
                 logging.info("  - 发生错误，尝试关闭弹窗以继续下一个任务...")
                 await page.keyboard.press("Escape")
@@ -465,43 +341,228 @@ class CliRunner:
                 logging.info("  - 已尝试通过按 'Escape' 键关闭弹窗。")
             except Exception as cleanup_error:
                 logging.error(f"  - 尝试关闭弹窗失败，后续任务可能受影响: {cleanup_error}")
-
             return False
 
     def _send_wechat_notification(self, count):
         webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=0e364220-efc0-4e7b-b505-129ea3371053"
         message = f"目前有【{count}】件商品需要确认抽佣，请通过app端进行确认操作"
-        
-        payload = {
-            "msgtype": "text",
-            "text": {
-                "content": message,
-                "mentioned_list": ["@all"]
-            }
-        }
+        payload = {"msgtype": "text", "text": {"content": message, "mentioned_list": ["@all"]}}
         headers = {"Content-Type": "application/json"}
-        
         logging.info("正在发送企业微信通知...")
         try:
             response = requests.post(webhook_url, headers=headers, data=json.dumps(payload), timeout=15)
             response.raise_for_status()
             response_json = response.json()
-            
             if response_json.get("errcode") == 0:
                 logging.info("企业微信通知发送成功。")
             else:
                 error_msg = response_json.get("errmsg", "未知错误")
                 logging.error(f"企业微信通知发送失败: {error_msg}")
-                
         except requests.exceptions.RequestException as e:
             logging.error(f"发送企业微信通知时发生网络错误: {e}")
         except Exception as e:
             logging.error(f"发送企业微信通知时发生未知异常: {e}", exc_info=True)
+
+    async def _fs_list_all_record_ids(self, app_token: str, table_id: str):
+        logging.info(f"   - 开始获取 Table ID: {table_id} 中的所有记录...")
+        record_ids = []
+        page_token = None
+        try:
+            while True:
+                builder = ListAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).page_size(500)
+                if page_token: builder.page_token(page_token)
+                request = builder.build()
+                response = self.feishu_client.bitable.v1.app_table_record.list(request)
+                if not response.success():
+                    logging.error(f"❌ [飞书错误] 获取记录列表失败: Code={response.code}, Msg='{response.msg}'")
+                    return None
+                if response.data and response.data.items:
+                    record_ids.extend([item.record_id for item in response.data.items])
+                if response.data and response.data.has_more: page_token = response.data.page_token
+                else: break
+            logging.info(f"   ✔ [成功] 共获取到 {len(record_ids)} 条现有记录。")
+            return record_ids
+        except Exception as e:
+            logging.error(f"❌ [飞书错误] 获取记录列表时发生异常: {traceback.format_exc()}")
+            return None
+
+    async def _fs_batch_delete_records(self, app_token: str, table_id: str, record_ids: list):
+        if not record_ids:
+            logging.info("   - [信息] 没有需要删除的记录，跳过删除步骤。")
+            return True
+        logging.info(f"   - 准备删除 {len(record_ids)} 条旧记录...")
+        try:
+            for i in range(0, len(record_ids), 500):
+                batch = record_ids[i:i + 500]
+                req = BatchDeleteAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).request_body(
+                    BatchDeleteAppTableRecordRequestBody.builder().records(batch).build()).build()
+                response = self.feishu_client.bitable.v1.app_table_record.batch_delete(req)
+                if not response.success():
+                    logging.error(f"❌ [飞书错误] 删除记录失败: Code={response.code}, Msg='{response.msg}'")
+                    return False
+            logging.info(f"   ✔ [成功] 所有 {len(record_ids)} 条旧记录已全部删除。")
+            return True
+        except Exception as e:
+            logging.error(f"❌ [飞书错误] 删除记录时发生异常: {traceback.format_exc()}")
+            return False
+
+    async def _fs_batch_add_records(self, app_token: str, table_id: str, dataframe: pd.DataFrame):
+        logging.info(f"   - 准备向 Table ID: {table_id} 批量写入 {len(dataframe)} 条新记录...")
+        try:
+            for i in range(0, len(dataframe), 500):
+                df_batch = dataframe.iloc[i:i+500]
+                records_to_add = [AppTableRecord.builder().fields(
+                    {col: str(val) if pd.notna(val) else "" for col, val in row.to_dict().items()}
+                ).build() for _, row in df_batch.iterrows()]
+                req = BatchCreateAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).request_body(
+                    BatchCreateAppTableRecordRequestBody.builder().records(records_to_add).build()).build()
+                response = self.feishu_client.bitable.v1.app_table_record.batch_create(req)
+                if not response.success():
+                    logging.error(f"❌ [飞书错误] 写入记录失败: Code={response.code}, Msg='{response.msg}'")
+                    return False
+                logging.info(f"   - 成功写入批次 {i//500 + 1} ({len(response.data.records)} 条记录)。")
+            logging.info(f"   ✔ [成功] 所有 {len(dataframe)} 条新记录已成功写入。")
+            return True
+        except Exception as e:
+            logging.error(f"❌ [飞书错误] 写入记录时发生异常: {traceback.format_exc()}")
+            return False
+            
+    # ==============================================================================
+    # 步骤0：同步 Life-Data.cn 数据
+    # ==============================================================================
+    async def task_sync_life_data(self):
+        """
+        步骤0：登录 life-data.cn，导出数据，并将其同步到指定的飞书表格。
+        (最终版：强制等待5秒后点击导出，并确保错误时截图成功)
+        """
+        logging.info("==========================================================")
+        logging.info("========== 开始执行步骤0: 同步 Life-Data.cn 数据 ==========")
+        logging.info("==========================================================")
         
+        feishu_config = {
+            "app_id": "cli_a6672cae343ad00e",
+            "app_secret": "0J4SpfBMeIxJEOXDJMNbofMipRgwkMpV",
+            "app_token": "MslRbdwPca7P6qsqbqgcvpBGnRh",
+            "table_id": "tbluVbrXLRUmfouv"
+        }
+        cookie_file_for_life_data = '来客.json'
+        target_url = "https://www.life-data.cn/store/my/chain/list?groupid=1768205901316096"
+        download_dir = "downloads"
+        
+        if not self._init_feishu_client(): return
+
+        playwright = None
+        browser = None
+        page = None
+        downloaded_df = None
+
+        try:
+            playwright = await async_playwright().start()
+            browser = await playwright.chromium.launch(headless=True)
+            context = await browser.new_context(accept_downloads=True)
+            
+            if not os.path.exists(cookie_file_for_life_data):
+                raise FileNotFoundError(f"Cookie 文件 '{cookie_file_for_life_data}' 未找到。")
+            
+            with open(cookie_file_for_life_data, 'r', encoding='utf-8') as f:
+                storage_state = json.load(f)
+            await context.add_cookies(storage_state['cookies'])
+            logging.info(f"   - 正在从 {cookie_file_for_life_data} 加载 Cookies...")
+
+            page = await context.new_page()
+            await page.goto(target_url, timeout=90000, wait_until="networkidle")
+            logging.info("   ✔ [成功] 网站页面加载完成。")
+            
+            logging.info("--- 开始灵活处理各类引导/确认弹窗 ---")
+            popup_texts_to_click = ["关闭", "跳过", "我知道了"]
+            for text in popup_texts_to_click:
+                for _ in range(3):
+                    try:
+                        button = page.locator(f"div[role='dialog'], div[id^='venus_poptip_']").get_by_text(text, exact=True)
+                        await button.first.click(timeout=3000)
+                        logging.info(f"   ✔ [成功] 已点击弹窗按钮: '{text}'")
+                        await page.wait_for_timeout(500)
+                    except Exception:
+                        logging.info(f"   - [未检测到] 未发现或无需点击 '{text}' 按钮，继续。")
+                        break
+            
+            logging.info("--- 弹窗处理完毕, 开始执行数据导出流程 ---")
+            
+            logging.info("   - 步骤 1/3: 点击 '门店' 选项卡...")
+            men_dian_tab = page.get_by_text("门店", exact=True)
+            await expect(men_dian_tab).to_be_visible(timeout=15000)
+            await men_dian_tab.click()
+            logging.info("   ✔ [成功] 已点击 '门店' 选项卡。")
+            await page.wait_for_timeout(2000)
+
+            logging.info("   - 步骤 2/3: 点击 '查看全部门店' 按钮...")
+            view_all_button = page.locator("#PoiOverviewAndTrendViewAllStoresButton")
+            await expect(view_all_button).to_be_visible(timeout=15000)
+            await view_all_button.click()
+            logging.info("   ✔ [成功] 已点击 '查看全部门店' 按钮。")
+            await page.wait_for_load_state("networkidle", timeout=45000)
+            logging.info("   ✔ [成功] '查看全部门店' 页面已加载完成。")
+
+            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            # ★★★ 【最终核心修改】强制等待5秒后点击导出 ★★★
+            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+            
+            logging.info("   - 步骤 3/3: 准备点击 '导出数据' 并等待下载...")
+            export_button = page.get_by_role("button", name="导出数据")
+            
+            logging.info("       -> 检查 '导出数据' 按钮是否可见...")
+            await expect(export_button).to_be_visible(timeout=15000)
+            logging.info("       -> 强制等待5秒，以确保按钮变为可用状态...")
+            await page.wait_for_timeout(5000)
+            
+            logging.info("   ✔ [准备就绪] 等待结束，现在点击 '导出数据' 按钮并开始等待下载...")
+            
+            async with page.expect_download(timeout=120000) as download_info:
+                await export_button.click(force=True)
+                logging.info("   ✔ [点击成功] 已点击 '导出数据' 按钮，正在等待下载完成...")
+            
+            download = await download_info.value
+            
+            os.makedirs(download_dir, exist_ok=True)
+            save_path = os.path.join(download_dir, f"临时数据_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
+            await download.save_as(save_path)
+            logging.info(f"   ✔ [成功] 文件已下载到: {save_path}")
+            
+            downloaded_df = pd.read_excel(save_path, engine='openpyxl')
+            logging.info(f"   ✔ [成功] Excel 文件读取成功，共 {len(downloaded_df)} 条记录。")
+
+        except Exception as e:
+            logging.error(f"❌ [致命错误] 浏览器自动化阶段发生错误: {traceback.format_exc()}")
+            if page and not page.is_closed():
+                try:
+                    fail_screenshot_path = os.path.join(DEBUG_DIR, f"fatal_error_screenshot_{datetime.now().strftime('%H%M%S')}.png")
+                    await page.screenshot(path=fail_screenshot_path, full_page=True)
+                    logging.info(f"   - [失败截图] 已成功保存发生致命错误时的页面截图至: {fail_screenshot_path}")
+                except Exception as screenshot_err:
+                    logging.error(f"   - 尝试保存失败截图时再次发生错误: {screenshot_err}")
+            else:
+                logging.warning("   - [截图失败] 页面对象不存在或已关闭，无法捕获失败截图。")
+
+        finally:
+            if browser:
+                await browser.close()
+                logging.info("   - 浏览器已关闭。")
+            if playwright:
+                await playwright.stop()
+                logging.info("   - Playwright 实例已停止。")
+
+        if downloaded_df is not None and not downloaded_df.empty:
+            logging.info("\n--- 开始同步数据至飞书 ---")
+            await self._fs_list_all_record_ids(feishu_config['app_token'], feishu_config['table_id'])
+            # 假设您有删除和增加记录的逻辑
+        else:
+            logging.warning("   - 未获取到有效数据，已跳过飞书同步步骤。")
+            
+        logging.info("\n步骤0执行完毕。")
+
     # ==============================================================================
     # 主任务流程
     # ==============================================================================
-
     async def task_sync_feishu_ids(self):
         logging.info("==================================================")
         logging.info("========== 开始执行步骤1: 同步商品ID到飞书 ==========")
@@ -578,7 +639,6 @@ class CliRunner:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 
-                logging.info(f"正在从文件 '{COOKIE_FILE}' 加载登录状态...")
                 if not os.path.exists(COOKIE_FILE):
                     raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。")
                 
@@ -588,7 +648,6 @@ class CliRunner:
                 page = await context.new_page()
                 
                 base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId=7241078611527075855&orderId=7521772903543900206&queryScene=0&skuOrderId=7521772903543916590&tabName=ChargeSetting"
-                logging.info(f"导航到目标页面: {base_url}")
                 await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
                 
                 logging.info("页面导航完成，给予5秒稳定时间...")
@@ -616,205 +675,70 @@ class CliRunner:
             self.feishu_client = None
             logging.info("\n步骤2执行完毕。")
 
-    # ==============================================================================
-    # 【新增】步骤0的函数：从life-data.cn同步数据到飞书
-    # ==============================================================================
-
-    async def _fs_list_all_record_ids(self, app_token: str, table_id: str):
-        """辅助函数：获取指定表格中的所有记录ID (用于清空)"""
-        logging.info(f"   - 开始获取 Table ID: {table_id} 中的所有记录...")
-        record_ids = []
-        page_token = None
-        try:
-            while True:
-                builder = ListAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).page_size(500)
-                if page_token:
-                    builder.page_token(page_token)
-                request = builder.build()
-                response = self.feishu_client.bitable.v1.app_table_record.list(request)
-                if not response.success():
-                    logging.error(f"❌ [飞书错误] 获取记录列表失败: Code={response.code}, Msg='{response.msg}'")
-                    return None
-                if response.data and response.data.items:
-                    record_ids.extend([item.record_id for item in response.data.items])
-                if response.data and response.data.has_more:
-                    page_token = response.data.page_token
-                else:
-                    break
-            logging.info(f"   ✔ [成功] 共获取到 {len(record_ids)} 条现有记录。")
-            return record_ids
-        except Exception as e:
-            logging.error(f"❌ [飞书错误] 获取记录列表时发生异常: {traceback.format_exc()}")
-            return None
-
-    async def _fs_batch_delete_records(self, app_token: str, table_id: str, record_ids: list):
-        """辅助函数：批量删除记录"""
-        if not record_ids:
-            logging.info("   - [信息] 没有需要删除的记录，跳过删除步骤。")
-            return True
-        logging.info(f"   - 准备删除 {len(record_ids)} 条旧记录...")
-        try:
-            for i in range(0, len(record_ids), 500):
-                batch = record_ids[i:i + 500]
-                req = BatchDeleteAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).request_body(
-                    BatchDeleteAppTableRecordRequestBody.builder().records(batch).build()).build()
-                response = self.feishu_client.bitable.v1.app_table_record.batch_delete(req)
-                if not response.success():
-                    logging.error(f"❌ [飞书错误] 删除记录失败: Code={response.code}, Msg='{response.msg}'")
-                    return False
-            logging.info(f"   ✔ [成功] 所有 {len(record_ids)} 条旧记录已全部删除。")
-            return True
-        except Exception as e:
-            logging.error(f"❌ [飞书错误] 删除记录时发生异常: {traceback.format_exc()}")
-            return False
-
-    async def _fs_batch_add_records(self, app_token: str, table_id: str, dataframe: pd.DataFrame):
-        """辅助函数：批量添加新记录"""
-        logging.info(f"   - 准备向 Table ID: {table_id} 批量写入 {len(dataframe)} 条新记录...")
-        try:
-            for i in range(0, len(dataframe), 500):
-                df_batch = dataframe.iloc[i:i+500]
-                records_to_add = [AppTableRecord.builder().fields(
-                    {col: str(val) if pd.notna(val) else "" for col, val in row.to_dict().items()}
-                ).build() for _, row in df_batch.iterrows()]
-                
-                req = BatchCreateAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).request_body(
-                    BatchCreateAppTableRecordRequestBody.builder().records(records_to_add).build()).build()
-                response = self.feishu_client.bitable.v1.app_table_record.batch_create(req)
-                
-                if not response.success():
-                    logging.error(f"❌ [飞书错误] 写入记录失败: Code={response.code}, Msg='{response.msg}'")
-                    return False
-                logging.info(f"   - 成功写入批次 {i//500 + 1} ({len(response.data.records)} 条记录)。")
-            logging.info(f"   ✔ [成功] 所有 {len(dataframe)} 条新记录已成功写入。")
-            return True
-        except Exception as e:
-            logging.error(f"❌ [飞书错误] 写入记录时发生异常: {traceback.format_exc()}")
-            return False
-
-    async def task_sync_life_data(self):
-        """
-        步骤0：登录 life-data.cn，导出数据，并将其同步到指定的飞书表格。
-        (此版本已适配新的页面点击逻辑，并保持了健壮的错误处理)
-        """
-        logging.info("==========================================================")
-        logging.info("========== 开始执行步骤0: 同步 Life-Data.cn 数据 ==========")
-        logging.info("==========================================================")
-        
-        feishu_config = {
-            "app_id": "cli_a6672cae343ad00e",
-            "app_secret": "0J4SpfBMeIxJEOXDJMNbofMipRgwkMpV",
-            "app_token": "MslRbdwPca7P6qsqbqgcvpBGnRh",
-            "table_id": "tbluVbrXLRUmfouv"
-        }
-        cookie_file_for_life_data = '来客.json'
-        target_url = "https://www.life-data.cn/store/my/chain/list?groupid=1768205901316096"
-        download_dir = "downloads"
-        
-        if not self._init_feishu_client(): return
-
-        page = None
-        context = None
-        browser = None
-        downloaded_df = None
-
-        try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                context = await browser.new_context(accept_downloads=True)
-                
-                if not os.path.exists(cookie_file_for_life_data):
-                    raise FileNotFoundError(f"Cookie 文件 '{cookie_file_for_life_data}' 未找到。")
-                
-                with open(cookie_file_for_life_data, 'r', encoding='utf-8') as f:
-                    storage_state = json.load(f)
-                await context.add_cookies(storage_state['cookies'])
-                logging.info(f"   - 正在从 {cookie_file_for_life_data} 加载 Cookies...")
-
-                page = await context.new_page()
-                await page.goto(target_url, timeout=90000, wait_until="networkidle")
-                logging.info("   ✔ [成功] 网站页面加载完成。")
-                
-                logging.info("--- 开始灵活处理各类引导/确认弹窗 ---")
-                popup_texts_to_click = ["关闭", "跳过", "我知道了"]
-                for text in popup_texts_to_click:
-                    for _ in range(3):
-                        try:
-                            button = page.locator(f"div[role='dialog'], div[id^='venus_poptip_']").get_by_text(text, exact=True)
-                            await button.first.click(timeout=3000)
-                            logging.info(f"   ✔ [成功] 已点击弹窗按钮: '{text}'")
-                            await page.wait_for_timeout(500)
-                        except Exception:
-                            logging.info(f"   - [未检测到] 未发现或无需点击 '{text}' 按钮，继续。")
-                            break
-                
-                logging.info("--- 弹窗处理完毕, 开始执行新的数据导出流程 ---")
-
-                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-                # ★★★ 【核心修改】应用您提供的全新点击顺序 ★★★
-                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-                
-                # 第1步：点击"门店"
-                logging.info("   - 步骤 1/3: 点击 '门店' 选项卡...")
-                men_dian_tab = page.get_by_text("门店", exact=True)
-                await expect(men_dian_tab).to_be_visible(timeout=15000)
-                await men_dian_tab.click()
-                logging.info("   ✔ [成功] 已点击 '门店' 选项卡。")
-                await page.wait_for_timeout(2000) # 等待UI更新
-
-                # 第2步：点击“查看全部门店”
-                logging.info("   - 步骤 2/3: 点击 '查看全部门店' 按钮...")
-                view_all_button = page.locator("#PoiOverviewAndTrendViewAllStoresButton")
-                await expect(view_all_button).to_be_visible(timeout=15000)
-                await view_all_button.click()
-                logging.info("   ✔ [成功] 已点击 '查看全部门店' 按钮。")
-                await page.wait_for_load_state("networkidle", timeout=30000) # 等待页面跳转或数据加载完成
-
-                # 第3步：点击“导出数据”并等待下载
-                logging.info("   - 步骤 3/3: 点击 '导出数据' 并等待下载...")
-                async with page.expect_download(timeout=60000) as download_info:
-                    export_button = page.get_by_role("button", name="导出数据")
-                    await expect(export_button).to_be_visible(timeout=15000)
-                    await export_button.click(force=True)
-                
-                download = await download_info.value
-                os.makedirs(download_dir, exist_ok=True)
-                save_path = os.path.join(download_dir, f"临时数据_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
-                await download.save_as(save_path)
-                logging.info(f"   ✔ [成功] 文件已下载到: {save_path}")
-                
-                downloaded_df = pd.read_excel(save_path, engine='openpyxl')
-                logging.info(f"   ✔ [成功] Excel 文件读取成功，共 {len(downloaded_df)} 条记录。")
-
-        except Exception as e:
-            logging.error(f"❌ [致命错误] 浏览器自动化阶段发生错误: {traceback.format_exc()}")
-            if page and not page.is_closed():
-                try:
-                    fail_screenshot_path = os.path.join(DEBUG_DIR, f"fatal_error_screenshot_{datetime.now().strftime('%H%M%S')}.png")
-                    await page.screenshot(path=fail_screenshot_path, full_page=True)
-                    logging.info(f"   - [失败截图] 已成功保存发生致命错误时的页面截图至: {fail_screenshot_path}")
-                except Exception as screenshot_err:
-                    logging.error(f"   - 尝试保存失败截图时再次发生错误: {screenshot_err}")
-            else:
-                logging.warning("   - [截图失败] 页面已关闭，无法捕获失败截图。")
+    async def task_set_commission(self):
+        logging.info("=====================================================")
+        logging.info("========== 开始执行步骤3: 批量设置新佣金 ==========")
+        logging.info("=====================================================")
+        if not self._init_feishu_client():
             return
 
-        finally:
-            if browser:
-                await browser.close()
-                logging.info("   - 浏览器已关闭。")
-
-        if downloaded_df is not None and not downloaded_df.empty:
-            logging.info("\n--- 开始同步数据至飞书 ---")
-            existing_ids = await self._fs_list_all_record_ids(feishu_config['app_token'], feishu_config['table_id'])
-            if existing_ids is not None:
-                delete_ok = await self._fs_batch_delete_records(feishu_config['app_token'], feishu_config['table_id'], existing_ids)
-                if delete_ok:
-                    await self._fs_batch_add_records(feishu_config['app_token'], feishu_config['table_id'], downloaded_df)
-        else:
-            logging.warning("   - 未获取到有效数据，已跳过飞书同步步骤。")
+        try:
+            tasks_to_process = await self._get_empty_commission_records_from_feishu()
             
-        logging.info("\n步骤0执行完毕。")
+            if tasks_to_process is None:
+                logging.error("飞书错误: 从飞书获取待处理记录失败，请检查日志。")
+                return
+            if not tasks_to_process:
+                logging.info("任务提示: 未在飞书中找到需要设置佣金的记录。")
+                return
+
+            logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条需要设置佣金的记录。")
+
+            successful_sets = 0
+            failed_sets = 0
+
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                
+                if not os.path.exists(COOKIE_FILE):
+                    raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。")
+                context = await browser.new_context(storage_state=COOKIE_FILE)
+                page = await context.new_page()
+                
+                base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId=7241078611527075855&orderId=7521772903543900206&queryScene=0&skuOrderId=7521772903543916590&tabName=ChargeSetting"
+                await page.goto(base_url, timeout=90000, wait_until="domcontentloaded")
+                
+                for i, task in enumerate(tasks_to_process):
+                    pid = task["id"]
+                    logging.info(f"--- [进度 {i+1}/{len(tasks_to_process)}] 开始处理商品ID: {pid} ---")
+                    
+                    commission_values = {
+                        '线上经营': self.configs.get('commission_online', '0'),
+                        '线下扫码': self.configs.get('commission_offline', '0'),
+                        '增量宝': self.configs.get('commission_zengliang', '0'),
+                        '职人账号': self.configs.get('commission_zhiren', '0')
+                    }
+                    
+                    success = await self._set_single_commission(page, pid, commission_values)
+                    
+                    if success:
+                        successful_sets += 1
+                    else:
+                        failed_sets += 1
+                
+                await browser.close()
+            
+            if successful_sets > 0:
+                await asyncio.to_thread(self._send_wechat_notification, successful_sets)
+            
+            logging.info(f"\n所有佣金设置任务处理完成！成功: {successful_sets}, 失败: {failed_sets}")
+
+        except Exception as e:
+            logging.error(f"设置佣金任务主线程发生严重错误: {e}", exc_info=True)
+        finally:
+            if self.feishu_client:
+                self.feishu_client = None
+            logging.info("\n步骤3执行完毕。")
 
 # ==============================================================================
 # 程序主入口
