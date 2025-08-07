@@ -105,9 +105,6 @@ class CliRunner:
             return []
 
     def _get_poi_ids_from_feishu_table(self):
-        """
-        【新增功能】从指定的飞书表格中获取所有门店的POI ID。
-        """
         poi_app_token = "MslRbdwPca7P6qsqbqgcvpBGnRh"
         poi_table_id = "tblyKop71MJbXThq"
         poi_id_field_name = "ID"
@@ -353,10 +350,6 @@ class CliRunner:
         return "查询失败", "未知错误"
 
     async def task_set_commission(self):
-        """
-        从飞书获取“抽佣比例”为空的商品ID，并为它们批量设置佣金。
-        (此版本已适配命令行环境，移除了UI相关调用)
-        """
         logging.info("=====================================================")
         logging.info("========== 开始执行步骤3: 批量设置新佣金 ==========")
         logging.info("=====================================================")
@@ -422,10 +415,6 @@ class CliRunner:
             logging.info("\n步骤3执行完毕。")
 
     async def _set_single_commission(self, page, product_id, commission_values):
-        """
-        在页面上为单个商品ID设置佣金。
-        (此版本结合了您的定位逻辑和弹窗范围限定，以提高稳定性)
-        """
         try:
             logging.info(f"  - 步骤1: 搜索 {product_id}...")
             input_field = page.get_by_role("textbox", name="商品名称/ID")
@@ -480,7 +469,6 @@ class CliRunner:
             return False
 
     def _send_wechat_notification(self, count):
-        """发送企业微信机器人通知。"""
         webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=0e364220-efc0-4e7b-b505-129ea3371053"
         message = f"目前有【{count}】件商品需要确认抽佣，请通过app端进行确认操作"
         
@@ -510,7 +498,6 @@ class CliRunner:
         except Exception as e:
             logging.error(f"发送企业微信通知时发生未知异常: {e}", exc_info=True)
         
-
     # ==============================================================================
     # 主任务流程
     # ==============================================================================
@@ -705,13 +692,10 @@ class CliRunner:
             logging.error(f"❌ [飞书错误] 写入记录时发生异常: {traceback.format_exc()}")
             return False
 
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★  【修正点】将下面的函数整体缩进，作为 CliRunner 的方法  ★★★
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     async def task_sync_life_data(self):
         """
         步骤0：登录 life-data.cn，导出数据，并将其同步到指定的飞书表格。
-        (此版本优化了弹窗处理和错误截图逻辑)
+        (此版本已适配新的页面点击逻辑，并保持了健壮的错误处理)
         """
         logging.info("==========================================================")
         logging.info("========== 开始执行步骤0: 同步 Life-Data.cn 数据 ==========")
@@ -729,7 +713,7 @@ class CliRunner:
         
         if not self._init_feishu_client(): return
 
-        page = None # 将page变量提前声明，以便在finally块中使用
+        page = None
         context = None
         browser = None
         downloaded_df = None
@@ -748,42 +732,50 @@ class CliRunner:
                 logging.info(f"   - 正在从 {cookie_file_for_life_data} 加载 Cookies...")
 
                 page = await context.new_page()
-                await page.goto(target_url, timeout=90000, wait_until="networkidle") # 增加导航超时时间
+                await page.goto(target_url, timeout=90000, wait_until="networkidle")
                 logging.info("   ✔ [成功] 网站页面加载完成。")
                 
-                # --- 优化后的弹窗处理逻辑 ---
                 logging.info("--- 开始灵活处理各类引导/确认弹窗 ---")
                 popup_texts_to_click = ["关闭", "跳过", "我知道了"]
                 for text in popup_texts_to_click:
-                    for _ in range(3): # 每个按钮最多尝试点击3次，以应对重复出现的弹窗
+                    for _ in range(3):
                         try:
-                            # 使用更灵活的定位器，并给予合理的短超时
                             button = page.locator(f"div[role='dialog'], div[id^='venus_poptip_']").get_by_text(text, exact=True)
                             await button.first.click(timeout=3000)
                             logging.info(f"   ✔ [成功] 已点击弹窗按钮: '{text}'")
-                            await page.wait_for_timeout(500) # 点击后短暂等待UI响应
+                            await page.wait_for_timeout(500)
                         except Exception:
                             logging.info(f"   - [未检测到] 未发现或无需点击 '{text}' 按钮，继续。")
-                            break # 如果找不到，就没必要再试了，直接处理下一个按钮
+                            break
                 
-                logging.info("--- 弹窗处理完毕 ---")
+                logging.info("--- 弹窗处理完毕, 开始执行新的数据导出流程 ---")
 
-                # 保存操作前截图，用于调试
-                screenshot_path_before_export = os.path.join(DEBUG_DIR, f"debug_before_export_click_{datetime.now().strftime('%H%M%S')}.png")
-                await page.screenshot(path=screenshot_path_before_export, full_page=True)
-                logging.info(f"   - [调试截图] 已保存点击“导出数据”前的页面截图至: {screenshot_path_before_export}")
+                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+                # ★★★ 【核心修改】应用您提供的全新点击顺序 ★★★
+                # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+                
+                # 第1步：点击"门店"
+                logging.info("   - 步骤 1/3: 点击 '门店' 选项卡...")
+                men_dian_tab = page.get_by_text("门店", exact=True)
+                await expect(men_dian_tab).to_be_visible(timeout=15000)
+                await men_dian_tab.click()
+                logging.info("   ✔ [成功] 已点击 '门店' 选项卡。")
+                await page.wait_for_timeout(2000) # 等待UI更新
 
-                logging.info("   - 正在点击“全部门店”数据按钮...")
-                # 增加超时时间，并确保按钮可见可点击
-                all_store_button = page.locator("#PoiTopRankActionAllStore")
-                await expect(all_store_button).to_be_visible(timeout=15000)
-                await all_store_button.click(force=True)
-                logging.info("   ✔ [点击成功] 已点击“全部门店”按钮。")
-                await page.wait_for_timeout(3000) # 等待数据刷新
+                # 第2步：点击“查看全部门店”
+                logging.info("   - 步骤 2/3: 点击 '查看全部门店' 按钮...")
+                view_all_button = page.locator("#PoiOverviewAndTrendViewAllStoresButton")
+                await expect(view_all_button).to_be_visible(timeout=15000)
+                await view_all_button.click()
+                logging.info("   ✔ [成功] 已点击 '查看全部门店' 按钮。")
+                await page.wait_for_load_state("networkidle", timeout=30000) # 等待页面跳转或数据加载完成
 
-                logging.info("   - 开始执行数据导出...")
-                async with page.expect_download(timeout=60000) as download_info: # 增加下载等待时间
-                    await page.get_by_role("button", name="导出数据").click(force=True)
+                # 第3步：点击“导出数据”并等待下载
+                logging.info("   - 步骤 3/3: 点击 '导出数据' 并等待下载...")
+                async with page.expect_download(timeout=60000) as download_info:
+                    export_button = page.get_by_role("button", name="导出数据")
+                    await expect(export_button).to_be_visible(timeout=15000)
+                    await export_button.click(force=True)
                 
                 download = await download_info.value
                 os.makedirs(download_dir, exist_ok=True)
@@ -795,9 +787,8 @@ class CliRunner:
                 logging.info(f"   ✔ [成功] Excel 文件读取成功，共 {len(downloaded_df)} 条记录。")
 
         except Exception as e:
-            # --- 优化后的错误处理和截图逻辑 ---
             logging.error(f"❌ [致命错误] 浏览器自动化阶段发生错误: {traceback.format_exc()}")
-            if page and not page.is_closed(): # 关键检查：确保page对象依然存在且未关闭
+            if page and not page.is_closed():
                 try:
                     fail_screenshot_path = os.path.join(DEBUG_DIR, f"fatal_error_screenshot_{datetime.now().strftime('%H%M%S')}.png")
                     await page.screenshot(path=fail_screenshot_path, full_page=True)
@@ -806,15 +797,13 @@ class CliRunner:
                     logging.error(f"   - 尝试保存失败截图时再次发生错误: {screenshot_err}")
             else:
                 logging.warning("   - [截图失败] 页面已关闭，无法捕获失败截图。")
-            return # 发生错误后直接返回，不再继续执行后续代码
+            return
 
         finally:
-            # --- 确保浏览器被关闭 ---
             if browser:
                 await browser.close()
                 logging.info("   - 浏览器已关闭。")
 
-        # --- 将数据同步到飞书的逻辑 ---
         if downloaded_df is not None and not downloaded_df.empty:
             logging.info("\n--- 开始同步数据至飞书 ---")
             existing_ids = await self._fs_list_all_record_ids(feishu_config['app_token'], feishu_config['table_id'])
