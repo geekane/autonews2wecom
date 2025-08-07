@@ -725,10 +725,10 @@ class CliRunner:
             logging.error(f"❌ [飞书错误] 写入记录时发生异常: {traceback.format_exc()}")
             return False
 
-    async def task_sync_life_data(self):
+async def task_sync_life_data(self):
         """
         步骤0：登录 life-data.cn，导出数据，并将其同步到指定的飞书表格。
-        (此版本已增强日志和调试截图)
+        (此版本优化了弹窗处理和错误截图逻辑)
         """
         logging.info("==========================================================")
         logging.info("========== 开始执行步骤0: 同步 Life-Data.cn 数据 ==========")
@@ -744,13 +744,18 @@ class CliRunner:
         target_url = "https://www.life-data.cn/store/my/chain/list?groupid=1768205901316096"
         download_dir = "downloads"
         
-        downloaded_df = None
         if not self._init_feishu_client(): return
+
+        page = None # 将page变量提前声明，以便在finally块中使用
+        context = None
+        browser = None
+        downloaded_df = None
 
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 context = await browser.new_context(accept_downloads=True)
+                
                 if not os.path.exists(cookie_file_for_life_data):
                     raise FileNotFoundError(f"Cookie 文件 '{cookie_file_for_life_data}' 未找到。")
                 
@@ -760,70 +765,41 @@ class CliRunner:
                 logging.info(f"   - 正在从 {cookie_file_for_life_data} 加载 Cookies...")
 
                 page = await context.new_page()
-                await page.goto(target_url, timeout=60000, wait_until="networkidle")
+                await page.goto(target_url, timeout=90000, wait_until="networkidle") # 增加导航超时时间
                 logging.info("   ✔ [成功] 网站页面加载完成。")
-
-                async def click_if_present(text: str, timeout: int = 3000):
-                    """
-                    检查并点击在指定弹窗或提示框内的按钮。
-                    """
-                    logging.info(f"   - 正在检查是否存在 '{text}' 按钮...")
-                    try:
-                        # 定位在对话框或特定ID的poptip中的按钮
-                        locator = page.locator("div[role='dialog'], div[id^='venus_poptip_']").get_by_text(text, exact=True).first
-                        await locator.wait_for(state="visible", timeout=timeout)
-                        logging.info(f"   ✔ [检测成功] 发现可见的 '{text}' 按钮，准备点击。")
-                        await locator.click(force=True)
-                        logging.info(f"   ✔ [点击成功] 已点击 '{text}' 按钮。")
-                        await asyncio.sleep(1.5)  # 点击后短暂等待，让UI响应
-                    except Exception:
-                        logging.info(f"   - [未检测到] 未在 {timeout}ms 内发现 '{text}' 按钮，跳过。")
                 
-                logging.info("--- 开始按顺序、灵活地处理引导/确认弹窗 ---")
+                # --- 优化后的弹窗处理逻辑 ---
+                logging.info("--- 开始灵活处理各类引导/确认弹窗 ---")
+                popup_texts_to_click = ["关闭", "跳过", "我知道了"]
+                for text in popup_texts_to_click:
+                    for _ in range(3): # 每个按钮最多尝试点击3次，以应对重复出现的弹窗
+                        try:
+                            # 使用更灵活的定位器，并给予合理的短超时
+                            button = page.locator(f"div[role='dialog'], div[id^='venus_poptip_']").get_by_text(text, exact=True)
+                            await button.first.click(timeout=3000)
+                            logging.info(f"   ✔ [成功] 已点击弹窗按钮: '{text}'")
+                            await page.wait_for_timeout(500) # 点击后短暂等待UI响应
+                        except Exception:
+                            logging.info(f"   - [未检测到] 未发现或无需点击 '{text}' 按钮，继续。")
+                            break # 如果找不到，就没必要再试了，直接处理下一个按钮
+                
+                logging.info("--- 弹窗处理完毕 ---")
 
-                async def click_dynamic_poptip_button(text_to_click: str, timeout: int = 3000):
-                    """
-                    在所有ID以 'venus_poptip_' 开头的弹窗中，
-                    查找并点击第一个包含指定文本的按钮。
-                    这种方式可以应对弹窗ID动态变化的情况。
-                    """
-                    description = f"引导弹窗中含 '{text_to_click}' 的按钮"
-                    logging.info(f"   - 正在检查并点击: {description}...")
-                    try:
-                        locator = page.locator(f"div[id^='venus_poptip_']").get_by_text(text_to_click, exact=True).first
-                        await locator.click(timeout=timeout)
-                        logging.info(f"   ✔ [点击成功] 已点击 '{description}'。")
-                        await asyncio.sleep(0.5)  # 点击后短暂等待UI响应
-                    except Exception:
-                        logging.info(f"   - [未检测到] 未在 {timeout}ms 内发现 '{description}'，跳过。")
-                        
-                # 1. 点击“关闭”
-                await click_dynamic_poptip_button("关闭")
-
-                # 2. 点击“跳过”
-                await click_dynamic_poptip_button("跳过")
-
-                # 3. 点击“我知道了”需要点击两次
-                await page.get_by_text("我知道了", exact=True).first.click(timeout=1000, force=True)
-                await page.get_by_text("我知道了", exact=True).first.click(timeout=1000, force=True)
-
-                # 保留您原来的调试截图逻辑，这非常有用
+                # 保存操作前截图，用于调试
                 screenshot_path_before_export = os.path.join(DEBUG_DIR, f"debug_before_export_click_{datetime.now().strftime('%H%M%S')}.png")
                 await page.screenshot(path=screenshot_path_before_export, full_page=True)
                 logging.info(f"   - [调试截图] 已保存点击“导出数据”前的页面截图至: {screenshot_path_before_export}")
 
-                try:
-                    logging.info("   - 正在点击“全部门店”数据按钮...")
-                    # 使用 locator 定位到 ID 为 PoiTopRankActionAllStore 的元素并执行点击
-                    await page.locator("#PoiTopRankActionAllStore").click(timeout=10000, force=True)
-                    logging.info("   ✔ [点击成功] 已点击“全部门店”按钮。")
-                    # 点击后建议增加一个短暂的等待，以确保数据完全加载出来
-                    await page.wait_for_timeout(3000) # 等待3秒
-                except Exception as e:
-                    logging.error(f"   ❌ [点击失败] 点击“全部门店”按钮时出错: {e}")
-                
+                logging.info("   - 正在点击“全部门店”数据按钮...")
+                # 增加超时时间，并确保按钮可见可点击
+                all_store_button = page.locator("#PoiTopRankActionAllStore")
+                await expect(all_store_button).to_be_visible(timeout=15000)
+                await all_store_button.click(force=True)
+                logging.info("   ✔ [点击成功] 已点击“全部门店”按钮。")
+                await page.wait_for_timeout(3000) # 等待数据刷新
+
                 logging.info("   - 开始执行数据导出...")
-                async with page.expect_download(timeout=30000) as download_info:
+                async with page.expect_download(timeout=60000) as download_info: # 增加下载等待时间
                     await page.get_by_role("button", name="导出数据").click(force=True)
                 
                 download = await download_info.value
@@ -834,18 +810,28 @@ class CliRunner:
                 
                 downloaded_df = pd.read_excel(save_path, engine='openpyxl')
                 logging.info(f"   ✔ [成功] Excel 文件读取成功，共 {len(downloaded_df)} 条记录。")
-                await browser.close()
+
         except Exception as e:
-            logging.error(f"❌ [致命错误] 浏览器或下载阶段发生错误: {traceback.format_exc()}")
-            if 'page' in locals() and not page.is_closed():
+            # --- 优化后的错误处理和截图逻辑 ---
+            logging.error(f"❌ [致命错误] 浏览器自动化阶段发生错误: {traceback.format_exc()}")
+            if page and not page.is_closed(): # 关键检查：确保page对象依然存在且未关闭
                 try:
                     fail_screenshot_path = os.path.join(DEBUG_DIR, f"fatal_error_screenshot_{datetime.now().strftime('%H%M%S')}.png")
                     await page.screenshot(path=fail_screenshot_path, full_page=True)
-                    logging.info(f"   - [失败截图] 已保存发生致命错误时的页面截图至: {fail_screenshot_path}")
+                    logging.info(f"   - [失败截图] 已成功保存发生致命错误时的页面截图至: {fail_screenshot_path}")
                 except Exception as screenshot_err:
                     logging.error(f"   - 尝试保存失败截图时再次发生错误: {screenshot_err}")
-            return
+            else:
+                logging.warning("   - [截图失败] 页面已关闭，无法捕获失败截图。")
+            return # 发生错误后直接返回，不再继续执行后续代码
 
+        finally:
+            # --- 确保浏览器被关闭 ---
+            if browser:
+                await browser.close()
+                logging.info("   - 浏览器已关闭。")
+
+        # --- 将数据同步到飞书的逻辑保持不变 ---
         if downloaded_df is not None and not downloaded_df.empty:
             logging.info("\n--- 开始同步数据至飞书 ---")
             existing_ids = await self._fs_list_all_record_ids(feishu_config['app_token'], feishu_config['table_id'])
@@ -858,9 +844,6 @@ class CliRunner:
             
         logging.info("\n步骤0执行完毕。")
 
-# ==============================================================================
-# 程序主入口
-# ==============================================================================
 async def main():
     runner = CliRunner()
     await runner.task_sync_life_data()
