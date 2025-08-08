@@ -32,3 +32,13 @@ jobs:
         
         # 运行您的Python脚本
         run: python 收集退款信息.py
+
+      - name: 上传错误截图 (如果任务失败)
+        # `if: failure()` 确保此步骤只在前面的步骤失败时运行
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          # 上传后的文件包名称
+          name: error-screenshot-artifact
+          # 需要上传的文件路径，与Python脚本中定义的一致
+          path: error_screenshot.png
