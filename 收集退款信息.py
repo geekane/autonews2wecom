@@ -112,17 +112,23 @@ async def export_and_process_data(page: Page):
             # 已修正笔误： "确定导出导出" -> "确定导出"
             await page.get_by_role("button", name="确定导出").click()
         new_page = await new_page_info.value
-        await new_page.wait_for_load_state("networkidle")
-        print("新页面已加载。")
+
+        print("新页面已捕获，正在等待 '下载' 按钮加载...")
+        download_button_selector = new_page.get_by_text("下载").nth(3)
+        await download_button_selector.wait_for(state="visible", timeout=60000)
+        print("✅ '下载' 按钮已可见。")
+
         print("步骤 5: 在新页面上点击 '下载' 按钮...")
         async with new_page.expect_download() as download_info:
-            await new_page.get_by_text("下载").nth(3).click()
+            await download_button_selector.click()
         download = await download_info.value
+
         if os.path.exists(EXPORT_FILE_NAME):
             os.remove(EXPORT_FILE_NAME)
         await download.save_as(EXPORT_FILE_NAME)
         print(f"✅ 文件已成功下载: {EXPORT_FILE_NAME}")
         await new_page.close()
+
         print("\n步骤 6: 读取并筛选Excel数据...")
         if not os.path.exists(EXPORT_FILE_NAME):
             print(f"❌ 错误：找不到下载的文件 {EXPORT_FILE_NAME}")
