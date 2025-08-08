@@ -1,0 +1,34 @@
+name: 【抖音来客】退款数据自动同步
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: '0 * * * *'
+
+jobs:
+  sync-refund-data:
+    runs-on: ubuntu-latest
+    
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.53.0-jammy
+
+    steps:
+      - name: 导入代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install playwright==1.53.0 pandas openpyxl lark-oapi
+
+      - name: 下载并缓存浏览器
+        # 虽然镜像已包含浏览器，但明确执行此命令可以确保浏览器是最新的且被Playwright正确识别
+        run: playwright install --with-deps chromium
+
+      - name: 运行自动化脚本
+        env:
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+        
+        # 运行您的Python脚本
+        run: python 收集退款信息.py
