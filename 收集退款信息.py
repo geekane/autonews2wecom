@@ -3,18 +3,14 @@ import asyncio
 import os
 import pandas as pd
 from playwright.async_api import async_playwright, Page, TimeoutError
-
-# 导入飞书SDK
 import lark_oapi as lark
 from lark_oapi.api.bitable.v1 import *
 
-# --- 基础配置 ---
 COOKIE_FILE = '来客.json'
 BASE_URL = 'https://life.douyin.com/p/liteapp/fulfillment-fusion/refund?groupid=1768205901316096'
 EXPORT_FILE_NAME = "退款记录.xlsx"
 ERROR_SCREENSHOT_FILE = "error_screenshot.png"
 
-# --- 飞书多维表格 API 配置 ---
 FEISHU_APP_ID = os.environ.get("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
 FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
