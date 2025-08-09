@@ -3,8 +3,6 @@ import asyncio
 import os
 import pandas as pd
 from playwright.async_api import async_playwright, Page, TimeoutError
-
-# 导入飞书SDK
 import lark_oapi as lark
 from lark_oapi.api.bitable.v1 import *
 
@@ -20,49 +18,26 @@ FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
 FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
 FEISHU_TABLE_ID = "tbljY9UiV7m5yk67"
 
-# =========================================================
-# 已修复: 解决了 page_token=None 的问题
-# =========================================================
+
 async def delete_all_records_from_bitable(client: lark.Client):
-    """
-    清空指定多维表格中的所有记录。
-    它通过循环分页查询获取所有记录ID，然后分批次批量删除。
-    """
+    # 此函数内容无需修改，保持原样
     print("\n--- 开始清空飞书多维表格中的所有现有记录 ---")
     all_record_ids = []
     page_token = None
-    
     print("步骤 1/2: 正在获取所有记录ID...")
     while True:
         try:
-            # --- 这是最核心的修复 ---
-            # 1. 创建一个基础的请求构建器
-            builder = ListAppTableRecordRequest.builder() \
-                .app_token(FEISHU_APP_TOKEN) \
-                .table_id(FEISHU_TABLE_ID) \
-                .page_size(500)
-
-            # 2. 只有当 page_token 有值时，才将其添加到构建器中
+            builder = ListAppTableRecordRequest.builder().app_token(FEISHU_APP_TOKEN).table_id(FEISHU_TABLE_ID).page_size(500)
             if page_token:
                 builder.page_token(page_token)
-            
-            # 3. 完成最终的请求构建
             list_req = builder.build()
-            
             list_resp = client.bitable.v1.app_table_record.list(list_req)
-
             if not list_resp.success():
-                lark.logger.error(
-                    f"获取记录列表失败, code: {list_resp.code}, msg: {list_resp.msg}, log_id: {list_resp.get_log_id()}\n"
-                    f"详细响应体 (Response Body):\n"
-                    f"{json.dumps(json.loads(list_resp.raw.content), indent=4, ensure_ascii=False)}"
-                )
+                lark.logger.error(f"获取记录列表失败, code: {list_resp.code}, msg: {list_resp.msg}, log_id: {list_resp.get_log_id()}\n详细响应体 (Response Body):\n{json.dumps(json.loads(list_resp.raw.content), indent=4, ensure_ascii=False)}")
                 return False
-
             items = getattr(list_resp.data, 'items', [])
             if items:
                 all_record_ids.extend([item.record_id for item in items])
-
             if getattr(list_resp.data, 'has_more', False):
                 page_token = list_resp.data.page_token
             else:
@@ -70,13 +45,10 @@ async def delete_all_records_from_bitable(client: lark.Client):
         except Exception as e:
             print(f"❌ 获取记录时发生代码异常: {e}")
             return False
-
     if not all_record_ids:
         print("✅ 表格中没有记录，无需清空。")
         return True
-
     print(f"共找到 {len(all_record_ids)} 条记录待删除。")
-
     print("步骤 2/2: 正在分批删除记录...")
     batch_size = 500
     for i in range(0, len(all_record_ids), batch_size):
@@ -84,35 +56,39 @@ async def delete_all_records_from_bitable(client: lark.Client):
         print(f"正在删除第 {i + 1} 到 {i + len(chunk_of_ids)} 条记录...")
         try:
             delete_req_body = BatchDeleteAppTableRecordRequestBody.builder().records(chunk_of_ids).build()
-            delete_req: BatchDeleteAppTableRecordRequest = BatchDeleteAppTableRecordRequest.builder() \
-                .app_token(FEISHU_APP_TOKEN) \
-                .table_id(FEISHU_TABLE_ID) \
-                .request_body(delete_req_body) \
-                .build()
-            
+            delete_req: BatchDeleteAppTableRecordRequest = BatchDeleteAppTableRecordRequest.builder().app_token(FEISHU_APP_TOKEN).table_id(FEISHU_TABLE_ID).request_body(delete_req_body).build()
             delete_resp = client.bitable.v1.app_table_record.batch_delete(delete_req)
             if not delete_resp.success():
-                lark.logger.error(
-                    f"批量删除记录失败, code: {delete_resp.code}, msg: {delete_resp.msg}, log_id: {delete_resp.get_log_id()}\n"
-                    f"详细响应体 (Response Body):\n"
-                    f"{json.dumps(json.loads(delete_resp.raw.content), indent=4, ensure_ascii=False)}"
-                )
+                lark.logger.error(f"批量删除记录失败, code: {delete_resp.code}, msg: {delete_resp.msg}, log_id: {delete_resp.get_log_id()}\n详细响应体 (Response Body):\n{json.dumps(json.loads(delete_resp.raw.content), indent=4, ensure_ascii=False)}")
             else:
                 lark.logger.info(f"✅ 成功删除 {len(getattr(delete_resp.data, 'records', []))} 条记录。")
         except Exception as e:
             print(f"❌ 删除记录时发生代码异常: {e}")
-
     print("--- 所有现有记录已清空 ---")
     return True
 
-# ... 其他函数 write_df_to_feishu_bitable, export_and_process_data, main 保持不变 ...
+
 async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
-    # 此函数内容无需修改
+    """
+    将筛选后的DataFrame数据【批量写入】到指定的飞书多维表格。
+    """
     print("\n--- 开始将新数据【批量写入】飞书多维表格 ---")
     total_rows = len(df)
     if total_rows == 0:
         print("没有需要写入的新数据。")
         return
+
+    # =========================================================
+    # 已修复: 在转换时间戳前，先将时间本地化为中国时区
+    # =========================================================
+    print("正在为日期时间数据附加时区信息 (Asia/Shanghai)...")
+    # 检查 '退款申请时间' 列是否已经是时区感知的
+    if df['退款申请时间'].dt.tz is None:
+        df['退款申请时间'] = df['退款申请时间'].dt.tz_localize('Asia/Shanghai')
+    else:
+        # 如果已有其他时区，则转换为上海时区
+        df['退款申请时间'] = df['退款申请时间'].dt.tz_convert('Asia/Shanghai')
+
     print("正在准备所有待上传的记录...")
     records_to_create = []
     for index, row in df.iterrows():
@@ -121,12 +97,14 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
             if pd.isna(value):
                 fields_data[col_name] = ""
             elif col_name == '退款申请时间':
+                # 现在 value 是一个带时区的datetime对象，调用 .timestamp() 会生成正确的UTC时间戳
                 timestamp_ms = int(value.timestamp() * 1000)
                 fields_data[col_name] = timestamp_ms
             else:
                 fields_data[col_name] = str(value)
         record = AppTableRecord.builder().fields(fields_data).build()
         records_to_create.append(record)
+    
     batch_size = 500
     success_count = 0
     for i in range(0, total_rows, batch_size):
@@ -149,7 +127,7 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
 
 
 async def export_and_process_data(page: Page):
-    # 此函数内容无需修改，但需要检查对删除函数的调用
+    # 此函数内容无需修改
     print("\n--- 开始执行数据导出、处理与上传流程 ---")
     try:
         # Playwright 操作部分
@@ -208,6 +186,7 @@ async def export_and_process_data(page: Page):
                     print(f"❌ 错误: 下载的Excel文件中缺少必需的列: '{col}'")
                     return False
             filtered_df = df[required_columns].copy()
+            # 这一步保持不变，依然是转换为datetime对象
             filtered_df['退款申请时间'] = pd.to_datetime(filtered_df['退款申请时间'])
             print("✅ 数据筛选完成。预览筛选后的数据 (前5行):")
             print(filtered_df.head().to_string())
