@@ -76,9 +76,6 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
         print("没有需要写入的新数据。")
         return
 
-    # =========================================================
-    # 已修复: 在转换时间戳前，先将时间本地化为中国时区
-    # =========================================================
     print("正在为日期时间数据附加时区信息 (Asia/Shanghai)...")
     # 检查 '退款申请时间' 列是否已经是时区感知的
     if df['退款申请时间'].dt.tz is None:
@@ -183,7 +180,6 @@ async def export_and_process_data(page: Page):
                     print(f"❌ 错误: 下载的Excel文件中缺少必需的列: '{col}'")
                     return False
             filtered_df = df[required_columns].copy()
-            # 这一步保持不变，依然是转换为datetime对象
             filtered_df['退款申请时间'] = pd.to_datetime(filtered_df['退款申请时间'])
             print("✅ 数据筛选完成。预览筛选后的数据 (前5行):")
             print(filtered_df.head().to_string())
