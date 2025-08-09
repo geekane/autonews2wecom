@@ -35,6 +35,7 @@ async def delete_all_records_from_bitable(client: lark.Client):
     print("步骤 1/2: 正在获取所有记录ID...")
     while True:
         try:
+            # 使用 list 接口来遍历所有记录，这是获取全部记录ID的最佳方式
             list_req: ListAppTableRecordRequest = ListAppTableRecordRequest.builder() \
                 .app_token(FEISHU_APP_TOKEN) \
                 .table_id(FEISHU_TABLE_ID) \
@@ -100,10 +101,6 @@ async def delete_all_records_from_bitable(client: lark.Client):
 
     print("--- 所有现有记录已清空 ---")
     return True
-
-# ... 其他函数 write_df_to_feishu_bitable, export_and_process_data, main 保持不变 ...
-# 我将它们折叠以保持简洁，您只需替换上面的 delete_all_records_from_bitable 函数即可。
-# 为了确保万无一失，下面是 export_and_process_data 的微调版，用于处理删除失败的情况。
 
 async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
     # 此函数内容无需修改
@@ -224,7 +221,6 @@ async def export_and_process_data(page: Page):
 
 async def main():
     # 此函数内容无需修改，保持原样
-    # ...
     async with async_playwright() as p:
         print(f"正在从 {COOKIE_FILE} 文件中读取 cookie...")
         try:
