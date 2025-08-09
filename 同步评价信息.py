@@ -1,4 +1,4 @@
-import json
+同步评价信息.pyimport json
 import asyncio
 import os
 import pandas as pd
@@ -304,3 +304,4 @@ async def main():
 # 确保主程序被调用
 if __name__ == '__main__':
     asyncio.run(main())
+
