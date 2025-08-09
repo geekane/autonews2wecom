@@ -121,10 +121,12 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
     print(f"总计 {total_rows} 条记录，成功写入 {success_count} 条。")
 
 async def export_and_process_data(page: Page):
-    # 此函数内容无需修改
+    """
+    执行完整的“导出-处理-上传”流程。
+    """
     print("\n--- 开始执行数据导出、处理与上传流程 ---")
     try:
-        # Playwright 操作部分
+        # ... (前面的步骤保持不变) ...
         print("步骤 1: 点击导出菜单的触发图标...")
         await page.locator(".byted-content-inner-wrapper > .byted-icon > svg > g > path").click(timeout=15000)
         await page.wait_for_timeout(1000)
@@ -152,28 +154,69 @@ async def export_and_process_data(page: Page):
             os.remove(EXPORT_FILE_NAME)
         await download.save_as(EXPORT_FILE_NAME)
         print(f"✅ 文件已成功下载: {EXPORT_FILE_NAME}")
+
+        # =========================================================
+        # 已新增: 遍历并删除已导出的记录
+        # =========================================================
+        print("\n步骤 5.1: 开始清理已导出的记录...")
+        # 注意：此时我们操作的是 new_page，即“导出记录”页面
+
+        # 找到所有“删除”按钮
+        delete_buttons = new_page.locator("span.bt--q2Xcs:has-text('删除')")
+        count = await delete_buttons.count()
+
+        if count == 0:
+            print("没有找到需要删除的记录。")
+        else:
+            print(f"找到 {count} 条已导出记录，准备逐一删除...")
+            # 从上到下删除，所以我们总是点击第一个“删除”按钮
+            for i in range(count):
+                print(f"正在删除第 {i + 1}/{count} 条记录...")
+                try:
+                    # 定位第一个可见的删除按钮并点击
+                    first_delete_button = delete_buttons.first
+                    await first_delete_button.click()
+                    await new_page.wait_for_timeout(500) # 等待确认弹窗出现
+
+                    # 点击“确认删除”按钮
+                    await new_page.get_by_role("button", name="确认删除").click()
+                    
+                    # 等待一下，让列表刷新。可以等待某个元素消失，或简单等待固定时间
+                    # 这里使用固定等待，因为它更简单
+                    await new_page.wait_for_timeout(2000) 
+                    print(f"第 {i + 1} 条记录已删除。")
+                except Exception as delete_error:
+                    print(f"❌ 删除第 {i + 1} 条记录时出错: {delete_error}")
+                    # 即使某条删除失败，也继续尝试下一条
+                    continue
+        
+        print("✅ 已导出记录清理完毕。")
+        # =========================================================
+        # 新增逻辑结束
+        # =========================================================
+
         await new_page.close()
+        print("导出记录页面已关闭。")
+
 
         print("\n步骤 6: 读取并筛选Excel数据...")
+        # ... (后续的代码保持不变) ...
         if not os.path.exists(EXPORT_FILE_NAME):
             print(f"❌ 错误：找不到下载的文件 {EXPORT_FILE_NAME}")
             return False
         df = pd.read_excel(EXPORT_FILE_NAME)
-
-        # 步骤 7: 初始化飞书客户端
-        if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-            print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
-            return False
-        feishu_client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).build()
-
-        # 步骤 8: 清空表格
-        delete_ok = await delete_all_records_from_bitable(feishu_client)
-        if not delete_ok:
-            print("❌ 清空表格步骤失败，终止后续写入操作。")
-            return False
-
-        # 步骤 9: 写入新数据
         if not df.empty:
+            # 步骤 7: 初始化飞书客户端
+            if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
+                print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
+                return False
+            feishu_client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).build()
+            # 步骤 8: 清空表格
+            delete_ok = await delete_all_records_from_bitable(feishu_client)
+            if not delete_ok:
+                print("❌ 清空表格步骤失败，终止后续写入操作。")
+                return False
+            # 步骤 9: 写入新数据
             required_columns = ['核销门店', '商品名称', '退款申请时间', '退款申请原因', '订单实收(元)', '退款金额(元)']
             for col in required_columns:
                 if col not in df.columns:
@@ -186,11 +229,18 @@ async def export_and_process_data(page: Page):
             await write_df_to_feishu_bitable(feishu_client, filtered_df)
         else:
             print("✅ 下载的Excel文件为空，无需写入新数据。")
-        
+            # 即使Excel为空，也执行清空操作
+            if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
+                print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
+                return False
+            feishu_client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).build()
+            await delete_all_records_from_bitable(feishu_client)
+            
         print("--- 数据导出、处理与上传流程执行成功 ---\n")
         return True
     except Exception as e:
         print(f"❌ 在执行导出、处理与上传流程时发生错误: {e}")
+        # 如果新页面已经打开，也尝试截图
         if 'new_page' in locals() and not new_page.is_closed():
             await new_page.screenshot(path=f"error_new_page_{ERROR_SCREENSHOT_FILE}")
         return False
@@ -209,7 +259,7 @@ async def main():
             print(f"❌ 致命错误: 无法读取或解析Cookie文件: {e}")
             exit(1)
         print("正在启动 Chromium 浏览器...")
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         context = await browser.new_context()
         page = await context.new_page()
         try:
