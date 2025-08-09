@@ -27,6 +27,7 @@ FEISHU_TABLE_ID = "tbljY9UiV7m5yk67"
 async def delete_all_records_from_bitable(client: lark.Client):
     """
     清空指定多维表格中的所有记录。
+    它通过循环分页查询获取所有记录ID，然后分批次批量删除。
     """
     print("\n--- 开始清空飞书多维表格中的所有现有记录 ---")
     all_record_ids = []
@@ -36,6 +37,7 @@ async def delete_all_records_from_bitable(client: lark.Client):
     print("步骤 1/2: 正在获取所有记录ID...")
     while True:
         try:
+            # 使用 list 接口来遍历所有记录
             list_req: ListAppTableRecordRequest = ListAppTableRecordRequest.builder() \
                 .app_token(FEISHU_APP_TOKEN) \
                 .table_id(FEISHU_TABLE_ID) \
@@ -43,6 +45,7 @@ async def delete_all_records_from_bitable(client: lark.Client):
                 .page_token(page_token) \
                 .build()
             
+            # SDK调用是同步的，不需要await
             list_resp = client.bitable.v1.app_table_record.list(list_req)
 
             if not list_resp.success():
@@ -53,7 +56,8 @@ async def delete_all_records_from_bitable(client: lark.Client):
             if items:
                 all_record_ids.extend([item.record_id for item in items])
 
-            if list_resp.data.has_more:
+            # 如果 has_more 为 True，则使用新的 page_token 继续下一轮查询
+            if getattr(list_resp.data, 'has_more', False):
                 page_token = list_resp.data.page_token
             else:
                 break # 没有更多记录了，跳出循环
@@ -81,6 +85,7 @@ async def delete_all_records_from_bitable(client: lark.Client):
                 .request_body(delete_req_body) \
                 .build()
             
+            # SDK调用是同步的，不需要await
             delete_resp = client.bitable.v1.app_table_record.batch_delete(delete_req)
             if not delete_resp.success():
                 lark.logger.error(f"批量删除记录失败, code: {delete_resp.code}, msg: {delete_resp.msg}")
@@ -145,7 +150,7 @@ async def export_and_process_data(page: Page):
     """
     print("\n--- 开始执行数据导出、处理与上传流程 ---")
     try:
-        # 省略 Playwright 操作部分以保持简洁，这部分无需修改...
+        # Playwright 操作部分保持不变...
         print("步骤 1: 点击导出菜单的触发图标...")
         await page.locator(".byted-content-inner-wrapper > .byted-icon > svg > g > path").click(timeout=15000)
         await page.wait_for_timeout(1000)
@@ -180,24 +185,6 @@ async def export_and_process_data(page: Page):
             print(f"❌ 错误：找不到下载的文件 {EXPORT_FILE_NAME}")
             return False
         df = pd.read_excel(EXPORT_FILE_NAME)
-        if df.empty:
-            print("✅ 下载的Excel文件为空，没有需要处理的数据。")
-            # 即使没有新数据，也执行一次清空操作，确保表格是空的
-            if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-                print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
-                return False
-            client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).build()
-            await delete_all_records_from_bitable(client)
-            return True
-        required_columns = ['核销门店', '商品名称', '退款申请时间', '退款申请原因', '订单实收(元)', '退款金额(元)']
-        for col in required_columns:
-            if col not in df.columns:
-                print(f"❌ 错误: 下载的Excel文件中缺少必需的列: '{col}'")
-                return False
-        filtered_df = df[required_columns].copy()
-        filtered_df['退款申请时间'] = pd.to_datetime(filtered_df['退款申请时间'])
-        print("✅ 数据筛选完成。预览筛选后的数据 (前5行):")
-        print(filtered_df.head().to_string())
 
         # =========================================================
         # 已修改: 在写入新数据前，先清空表格
@@ -212,7 +199,19 @@ async def export_and_process_data(page: Page):
         await delete_all_records_from_bitable(feishu_client)
 
         # 步骤 9: 写入新数据
-        await write_df_to_feishu_bitable(feishu_client, filtered_df)
+        if not df.empty:
+            required_columns = ['核销门店', '商品名称', '退款申请时间', '退款申请原因', '订单实收(元)', '退款金额(元)']
+            for col in required_columns:
+                if col not in df.columns:
+                    print(f"❌ 错误: 下载的Excel文件中缺少必需的列: '{col}'")
+                    return False
+            filtered_df = df[required_columns].copy()
+            filtered_df['退款申请时间'] = pd.to_datetime(filtered_df['退款申请时间'])
+            print("✅ 数据筛选完成。预览筛选后的数据 (前5行):")
+            print(filtered_df.head().to_string())
+            await write_df_to_feishu_bitable(feishu_client, filtered_df)
+        else:
+            print("✅ 下载的Excel文件为空，无需写入新数据。")
         
         print("--- 数据导出、处理与上传流程执行成功 ---\n")
         return True
@@ -224,7 +223,7 @@ async def export_and_process_data(page: Page):
 
 
 async def main():
-    # 此函数内容无需修改
+    # 此函数内容无需修改，保持原样
     async with async_playwright() as p:
         print(f"正在从 {COOKIE_FILE} 文件中读取 cookie...")
         try:
@@ -236,31 +235,22 @@ async def main():
         except Exception as e:
             print(f"❌ 致命错误: 无法读取或解析Cookie文件: {e}")
             exit(1)
-
         print("正在启动 Chromium 浏览器...")
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
         page = await context.new_page()
-
         try:
             print("正在添加 Cookie 到浏览器上下文...")
             await context.add_cookies(cookies)
-            
             print("正在导航至基础页面...")
             try:
                 await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45000)
             except TimeoutError:
                 print("⚠️ 页面加载在45秒内未完成，但脚本将继续尝试执行...")
-            
             print("基础页面导航完成或已超时。")
-
-            # 调用弹窗处理函数，这部分已在您之前的版本中
-            # async def close_potential_popups...
-
+            # 假设 close_potential_popups 函数已定义
             await page.wait_for_timeout(3000)
-
             successful = await export_and_process_data(page)
-
             if successful:
                 print("✅✅✅ 核心任务全部成功完成！")
             else:
@@ -268,7 +258,6 @@ async def main():
                 await page.screenshot(path=ERROR_SCREENSHOT_FILE, full_page=True)
                 print(f"✅ 截图已保存为 {ERROR_SCREENSHOT_FILE}")
                 exit(1)
-
         except Exception as e:
             print(f"Playwright 主流程操作时出错: {e}")
             print("正在截取当前页面以供调试...")
@@ -281,5 +270,4 @@ async def main():
             await browser.close()
 
 if __name__ == '__main__':
-    # 假设 close_potential_popups 函数已定义
     asyncio.run(main())
