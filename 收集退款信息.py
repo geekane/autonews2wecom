@@ -18,7 +18,6 @@ FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
 FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
 FEISHU_TABLE_ID = "tbljY9UiV7m5yk67"
 
-
 async def delete_all_records_from_bitable(client: lark.Client):
     # 此函数内容无需修改，保持原样
     print("\n--- 开始清空飞书多维表格中的所有现有记录 ---")
@@ -66,7 +65,6 @@ async def delete_all_records_from_bitable(client: lark.Client):
             print(f"❌ 删除记录时发生代码异常: {e}")
     print("--- 所有现有记录已清空 ---")
     return True
-
 
 async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
     """
@@ -124,7 +122,6 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
             print(f"❌ 在处理批次时发生SDK或网络异常: {e}")
     print(f"--- 飞书多维表格批量写入完成 ---")
     print(f"总计 {total_rows} 条记录，成功写入 {success_count} 条。")
-
 
 async def export_and_process_data(page: Page):
     # 此函数内容无需修改
