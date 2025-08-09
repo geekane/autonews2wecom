@@ -21,7 +21,7 @@ FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
 FEISHU_TABLE_ID = "tbljY9UiV7m5yk67"
 
 # =========================================================
-# 已修改: 增强了错误日志记录，提供完整响应体
+# 已修复: 解决了 page_token=None 的问题
 # =========================================================
 async def delete_all_records_from_bitable(client: lark.Client):
     """
@@ -35,25 +35,29 @@ async def delete_all_records_from_bitable(client: lark.Client):
     print("步骤 1/2: 正在获取所有记录ID...")
     while True:
         try:
-            # 使用 list 接口来遍历所有记录，这是获取全部记录ID的最佳方式
-            list_req: ListAppTableRecordRequest = ListAppTableRecordRequest.builder() \
+            # --- 这是最核心的修复 ---
+            # 1. 创建一个基础的请求构建器
+            builder = ListAppTableRecordRequest.builder() \
                 .app_token(FEISHU_APP_TOKEN) \
                 .table_id(FEISHU_TABLE_ID) \
-                .page_size(500) \
-                .page_token(page_token) \
-                .build()
+                .page_size(500)
+
+            # 2. 只有当 page_token 有值时，才将其添加到构建器中
+            if page_token:
+                builder.page_token(page_token)
+            
+            # 3. 完成最终的请求构建
+            list_req = builder.build()
             
             list_resp = client.bitable.v1.app_table_record.list(list_req)
 
             if not list_resp.success():
-                # --- 日志增强 ---
-                # 打印出从服务器收到的最原始、最详细的错误信息
                 lark.logger.error(
                     f"获取记录列表失败, code: {list_resp.code}, msg: {list_resp.msg}, log_id: {list_resp.get_log_id()}\n"
                     f"详细响应体 (Response Body):\n"
                     f"{json.dumps(json.loads(list_resp.raw.content), indent=4, ensure_ascii=False)}"
                 )
-                return False # 返回失败状态
+                return False
 
             items = getattr(list_resp.data, 'items', [])
             if items:
@@ -88,7 +92,6 @@ async def delete_all_records_from_bitable(client: lark.Client):
             
             delete_resp = client.bitable.v1.app_table_record.batch_delete(delete_req)
             if not delete_resp.success():
-                # --- 日志增强 ---
                 lark.logger.error(
                     f"批量删除记录失败, code: {delete_resp.code}, msg: {delete_resp.msg}, log_id: {delete_resp.get_log_id()}\n"
                     f"详细响应体 (Response Body):\n"
@@ -102,6 +105,7 @@ async def delete_all_records_from_bitable(client: lark.Client):
     print("--- 所有现有记录已清空 ---")
     return True
 
+# ... 其他函数 write_df_to_feishu_bitable, export_and_process_data, main 保持不变 ...
 async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
     # 此函数内容无需修改
     print("\n--- 开始将新数据【批量写入】飞书多维表格 ---")
@@ -220,7 +224,7 @@ async def export_and_process_data(page: Page):
         return False
 
 async def main():
-    # 此函数内容无需修改，保持原样
+    # 此函数内容无需修改
     async with async_playwright() as p:
         print(f"正在从 {COOKIE_FILE} 文件中读取 cookie...")
         try:
