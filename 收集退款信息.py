@@ -20,9 +20,8 @@ FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
 FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
 FEISHU_TABLE_ID = "tbljY9UiV7m5yk67"
 
-
 # =========================================================
-# 新增: 清空多维表格所有记录的函数
+# 已修改: 增强了错误日志记录，提供完整响应体
 # =========================================================
 async def delete_all_records_from_bitable(client: lark.Client):
     """
@@ -33,11 +32,9 @@ async def delete_all_records_from_bitable(client: lark.Client):
     all_record_ids = []
     page_token = None
     
-    # 步骤 1: 循环分页获取所有记录的ID
     print("步骤 1/2: 正在获取所有记录ID...")
     while True:
         try:
-            # 使用 list 接口来遍历所有记录
             list_req: ListAppTableRecordRequest = ListAppTableRecordRequest.builder() \
                 .app_token(FEISHU_APP_TOKEN) \
                 .table_id(FEISHU_TABLE_ID) \
@@ -45,33 +42,36 @@ async def delete_all_records_from_bitable(client: lark.Client):
                 .page_token(page_token) \
                 .build()
             
-            # SDK调用是同步的，不需要await
             list_resp = client.bitable.v1.app_table_record.list(list_req)
 
             if not list_resp.success():
-                lark.logger.error(f"获取记录列表失败, code: {list_resp.code}, msg: {list_resp.msg}")
-                return # 获取失败则中止清空操作
-            
+                # --- 日志增强 ---
+                # 打印出从服务器收到的最原始、最详细的错误信息
+                lark.logger.error(
+                    f"获取记录列表失败, code: {list_resp.code}, msg: {list_resp.msg}, log_id: {list_resp.get_log_id()}\n"
+                    f"详细响应体 (Response Body):\n"
+                    f"{json.dumps(json.loads(list_resp.raw.content), indent=4, ensure_ascii=False)}"
+                )
+                return False # 返回失败状态
+
             items = getattr(list_resp.data, 'items', [])
             if items:
                 all_record_ids.extend([item.record_id for item in items])
 
-            # 如果 has_more 为 True，则使用新的 page_token 继续下一轮查询
             if getattr(list_resp.data, 'has_more', False):
                 page_token = list_resp.data.page_token
             else:
-                break # 没有更多记录了，跳出循环
+                break
         except Exception as e:
-            print(f"❌ 获取记录时发生异常: {e}")
-            return
+            print(f"❌ 获取记录时发生代码异常: {e}")
+            return False
 
     if not all_record_ids:
         print("✅ 表格中没有记录，无需清空。")
-        return
+        return True
 
     print(f"共找到 {len(all_record_ids)} 条记录待删除。")
 
-    # 步骤 2: 分批次批量删除所有记录
     print("步骤 2/2: 正在分批删除记录...")
     batch_size = 500
     for i in range(0, len(all_record_ids), batch_size):
@@ -85,29 +85,33 @@ async def delete_all_records_from_bitable(client: lark.Client):
                 .request_body(delete_req_body) \
                 .build()
             
-            # SDK调用是同步的，不需要await
             delete_resp = client.bitable.v1.app_table_record.batch_delete(delete_req)
             if not delete_resp.success():
-                lark.logger.error(f"批量删除记录失败, code: {delete_resp.code}, msg: {delete_resp.msg}")
+                # --- 日志增强 ---
+                lark.logger.error(
+                    f"批量删除记录失败, code: {delete_resp.code}, msg: {delete_resp.msg}, log_id: {delete_resp.get_log_id()}\n"
+                    f"详细响应体 (Response Body):\n"
+                    f"{json.dumps(json.loads(delete_resp.raw.content), indent=4, ensure_ascii=False)}"
+                )
             else:
                 lark.logger.info(f"✅ 成功删除 {len(getattr(delete_resp.data, 'records', []))} 条记录。")
-
         except Exception as e:
-            print(f"❌ 删除记录时发生异常: {e}")
+            print(f"❌ 删除记录时发生代码异常: {e}")
 
     print("--- 所有现有记录已清空 ---")
+    return True
 
+# ... 其他函数 write_df_to_feishu_bitable, export_and_process_data, main 保持不变 ...
+# 我将它们折叠以保持简洁，您只需替换上面的 delete_all_records_from_bitable 函数即可。
+# 为了确保万无一失，下面是 export_and_process_data 的微调版，用于处理删除失败的情况。
 
 async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
-    """
-    将筛选后的DataFrame数据【批量写入】到指定的飞书多维表格。
-    """
+    # 此函数内容无需修改
     print("\n--- 开始将新数据【批量写入】飞书多维表格 ---")
     total_rows = len(df)
     if total_rows == 0:
         print("没有需要写入的新数据。")
         return
-
     print("正在准备所有待上传的记录...")
     records_to_create = []
     for index, row in df.iterrows():
@@ -122,8 +126,7 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
                 fields_data[col_name] = str(value)
         record = AppTableRecord.builder().fields(fields_data).build()
         records_to_create.append(record)
-    
-    batch_size = 500 
+    batch_size = 500
     success_count = 0
     for i in range(0, total_rows, batch_size):
         chunk = records_to_create[i:i + batch_size]
@@ -145,12 +148,10 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
 
 
 async def export_and_process_data(page: Page):
-    """
-    执行完整的“导出-处理-上传”流程。
-    """
+    # 此函数内容无需修改，但需要检查对删除函数的调用
     print("\n--- 开始执行数据导出、处理与上传流程 ---")
     try:
-        # Playwright 操作部分保持不变...
+        # Playwright 操作部分
         print("步骤 1: 点击导出菜单的触发图标...")
         await page.locator(".byted-content-inner-wrapper > .byted-icon > svg > g > path").click(timeout=15000)
         await page.wait_for_timeout(1000)
@@ -186,9 +187,6 @@ async def export_and_process_data(page: Page):
             return False
         df = pd.read_excel(EXPORT_FILE_NAME)
 
-        # =========================================================
-        # 已修改: 在写入新数据前，先清空表格
-        # =========================================================
         # 步骤 7: 初始化飞书客户端
         if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
             print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
@@ -196,7 +194,10 @@ async def export_and_process_data(page: Page):
         feishu_client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).build()
 
         # 步骤 8: 清空表格
-        await delete_all_records_from_bitable(feishu_client)
+        delete_ok = await delete_all_records_from_bitable(feishu_client)
+        if not delete_ok:
+            print("❌ 清空表格步骤失败，终止后续写入操作。")
+            return False
 
         # 步骤 9: 写入新数据
         if not df.empty:
@@ -221,9 +222,9 @@ async def export_and_process_data(page: Page):
             await new_page.screenshot(path=f"error_new_page_{ERROR_SCREENSHOT_FILE}")
         return False
 
-
 async def main():
     # 此函数内容无需修改，保持原样
+    # ...
     async with async_playwright() as p:
         print(f"正在从 {COOKIE_FILE} 文件中读取 cookie...")
         try:
@@ -268,6 +269,5 @@ async def main():
             print("操作完成，关闭浏览器...")
             await context.close()
             await browser.close()
-
 if __name__ == '__main__':
     asyncio.run(main())
