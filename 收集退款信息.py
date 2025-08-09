@@ -3,57 +3,106 @@ import asyncio
 import os
 import pandas as pd
 from playwright.async_api import async_playwright, Page, TimeoutError
+
+# 导入飞书SDK
 import lark_oapi as lark
 from lark_oapi.api.bitable.v1 import *
 
+# --- 基础配置 ---
 COOKIE_FILE = '来客.json'
 BASE_URL = 'https://life.douyin.com/p/liteapp/fulfillment-fusion/refund?groupid=1768205901316096'
 EXPORT_FILE_NAME = "退款记录.xlsx"
 ERROR_SCREENSHOT_FILE = "error_screenshot.png"
 
+# --- 飞书多维表格 API 配置 ---
 FEISHU_APP_ID = os.environ.get("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
 FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
 FEISHU_TABLE_ID = "tbljY9UiV7m5yk67"
 
+
 # =========================================================
-# 新增: 用于处理各类弹窗的函数
+# 新增: 清空多维表格所有记录的函数
 # =========================================================
-async def close_potential_popups(page: Page):
+async def delete_all_records_from_bitable(client: lark.Client):
     """
-    检查并关闭潜在的引导/升级弹窗。
+    清空指定多维表格中的所有记录。
     """
-    print("\n步骤: 检查并关闭潜在的引导/升级弹窗...")
-    try:
-        # 策略: 寻找并点击 "功能升级啦" 弹窗的关闭按钮 'x'
-        # 这个选择器是根据常见弹窗结构推断的，如果无效，需要用Inspector精确定位
-        # div[role='dialog'] 表示弹窗本身, button[aria-label='Close'] 是常见的关闭按钮
-        close_button = page.locator("div[role='dialog'] button[aria-label='Close'], div.semi-modal-close")
-        
-        # 使用5秒的短超时来检查
-        if await close_button.is_visible(timeout=5000):
-            print("检测到 '功能升级' 弹窗，正在点击关闭按钮...")
-            await close_button.first.click()
-            await page.wait_for_timeout(1000)
-            print("弹窗已关闭。")
+    print("\n--- 开始清空飞书多维表格中的所有现有记录 ---")
+    all_record_ids = []
+    page_token = None
+    
+    # 步骤 1: 循环分页获取所有记录的ID
+    print("步骤 1/2: 正在获取所有记录ID...")
+    while True:
+        try:
+            list_req: ListAppTableRecordRequest = ListAppTableRecordRequest.builder() \
+                .app_token(FEISHU_APP_TOKEN) \
+                .table_id(FEISHU_TABLE_ID) \
+                .page_size(500) \
+                .page_token(page_token) \
+                .build()
+            
+            list_resp = client.bitable.v1.app_table_record.list(list_req)
+
+            if not list_resp.success():
+                lark.logger.error(f"获取记录列表失败, code: {list_resp.code}, msg: {list_resp.msg}")
+                return # 获取失败则中止清空操作
+            
+            items = getattr(list_resp.data, 'items', [])
+            if items:
+                all_record_ids.extend([item.record_id for item in items])
+
+            if list_resp.data.has_more:
+                page_token = list_resp.data.page_token
+            else:
+                break # 没有更多记录了，跳出循环
+        except Exception as e:
+            print(f"❌ 获取记录时发生异常: {e}")
             return
 
-    except TimeoutError:
-        print("✅ 在检查时间内未发现已知的弹窗。")
-    except Exception as e:
-        print(f"关闭弹窗时发生未知错误: {e}")
-
-async def write_df_to_feishu_bitable(df: pd.DataFrame):
-    # 此函数内容无需修改，保持原样
-    print("\n--- 开始将数据【批量写入】飞书多维表格 ---")
-    if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-        print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
+    if not all_record_ids:
+        print("✅ 表格中没有记录，无需清空。")
         return
-    client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).log_level(lark.LogLevel.INFO).build()
+
+    print(f"共找到 {len(all_record_ids)} 条记录待删除。")
+
+    # 步骤 2: 分批次批量删除所有记录
+    print("步骤 2/2: 正在分批删除记录...")
+    batch_size = 500
+    for i in range(0, len(all_record_ids), batch_size):
+        chunk_of_ids = all_record_ids[i:i + batch_size]
+        print(f"正在删除第 {i + 1} 到 {i + len(chunk_of_ids)} 条记录...")
+        try:
+            delete_req_body = BatchDeleteAppTableRecordRequestBody.builder().records(chunk_of_ids).build()
+            delete_req: BatchDeleteAppTableRecordRequest = BatchDeleteAppTableRecordRequest.builder() \
+                .app_token(FEISHU_APP_TOKEN) \
+                .table_id(FEISHU_TABLE_ID) \
+                .request_body(delete_req_body) \
+                .build()
+            
+            delete_resp = client.bitable.v1.app_table_record.batch_delete(delete_req)
+            if not delete_resp.success():
+                lark.logger.error(f"批量删除记录失败, code: {delete_resp.code}, msg: {delete_resp.msg}")
+            else:
+                lark.logger.info(f"✅ 成功删除 {len(getattr(delete_resp.data, 'records', []))} 条记录。")
+
+        except Exception as e:
+            print(f"❌ 删除记录时发生异常: {e}")
+
+    print("--- 所有现有记录已清空 ---")
+
+
+async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
+    """
+    将筛选后的DataFrame数据【批量写入】到指定的飞书多维表格。
+    """
+    print("\n--- 开始将新数据【批量写入】飞书多维表格 ---")
     total_rows = len(df)
     if total_rows == 0:
-        print("没有需要写入的数据。")
+        print("没有需要写入的新数据。")
         return
+
     print("正在准备所有待上传的记录...")
     records_to_create = []
     for index, row in df.iterrows():
@@ -68,7 +117,8 @@ async def write_df_to_feishu_bitable(df: pd.DataFrame):
                 fields_data[col_name] = str(value)
         record = AppTableRecord.builder().fields(fields_data).build()
         records_to_create.append(record)
-    batch_size = 500
+    
+    batch_size = 500 
     success_count = 0
     for i in range(0, total_rows, batch_size):
         chunk = records_to_create[i:i + batch_size]
@@ -88,10 +138,14 @@ async def write_df_to_feishu_bitable(df: pd.DataFrame):
     print(f"--- 飞书多维表格批量写入完成 ---")
     print(f"总计 {total_rows} 条记录，成功写入 {success_count} 条。")
 
+
 async def export_and_process_data(page: Page):
-    # 此函数内容无需修改，保持原样
+    """
+    执行完整的“导出-处理-上传”流程。
+    """
     print("\n--- 开始执行数据导出、处理与上传流程 ---")
     try:
+        # 省略 Playwright 操作部分以保持简洁，这部分无需修改...
         print("步骤 1: 点击导出菜单的触发图标...")
         await page.locator(".byted-content-inner-wrapper > .byted-icon > svg > g > path").click(timeout=15000)
         await page.wait_for_timeout(1000)
@@ -105,20 +159,16 @@ async def export_and_process_data(page: Page):
         await page.wait_for_timeout(1000)
         print("步骤 4: 点击 '确定导出'，并捕获新页面...")
         async with page.context.expect_page() as new_page_info:
-            # 已修正笔误： "确定导出导出" -> "确定导出"
             await page.get_by_role("button", name="确定导出").click()
         new_page = await new_page_info.value
-
         print("新页面已捕获，正在等待 '下载' 按钮加载...")
         download_button_selector = new_page.get_by_text("下载").nth(3)
         await download_button_selector.wait_for(state="visible", timeout=60000)
         print("✅ '下载' 按钮已可见。")
-
         print("步骤 5: 在新页面上点击 '下载' 按钮...")
         async with new_page.expect_download() as download_info:
             await download_button_selector.click()
         download = await download_info.value
-
         if os.path.exists(EXPORT_FILE_NAME):
             os.remove(EXPORT_FILE_NAME)
         await download.save_as(EXPORT_FILE_NAME)
@@ -132,6 +182,12 @@ async def export_and_process_data(page: Page):
         df = pd.read_excel(EXPORT_FILE_NAME)
         if df.empty:
             print("✅ 下载的Excel文件为空，没有需要处理的数据。")
+            # 即使没有新数据，也执行一次清空操作，确保表格是空的
+            if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
+                print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
+                return False
+            client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).build()
+            await delete_all_records_from_bitable(client)
             return True
         required_columns = ['核销门店', '商品名称', '退款申请时间', '退款申请原因', '订单实收(元)', '退款金额(元)']
         for col in required_columns:
@@ -142,17 +198,33 @@ async def export_and_process_data(page: Page):
         filtered_df['退款申请时间'] = pd.to_datetime(filtered_df['退款申请时间'])
         print("✅ 数据筛选完成。预览筛选后的数据 (前5行):")
         print(filtered_df.head().to_string())
-        await write_df_to_feishu_bitable(filtered_df)
+
+        # =========================================================
+        # 已修改: 在写入新数据前，先清空表格
+        # =========================================================
+        # 步骤 7: 初始化飞书客户端
+        if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
+            print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
+            return False
+        feishu_client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).build()
+
+        # 步骤 8: 清空表格
+        await delete_all_records_from_bitable(feishu_client)
+
+        # 步骤 9: 写入新数据
+        await write_df_to_feishu_bitable(feishu_client, filtered_df)
+        
         print("--- 数据导出、处理与上传流程执行成功 ---\n")
         return True
     except Exception as e:
         print(f"❌ 在执行导出、处理与上传流程时发生错误: {e}")
+        if 'new_page' in locals() and not new_page.is_closed():
+            await new_page.screenshot(path=f"error_new_page_{ERROR_SCREENSHOT_FILE}")
         return False
 
+
 async def main():
-    """
-    主执行函数，包含浏览器初始化、错误捕获和截图逻辑。
-    """
+    # 此函数内容无需修改
     async with async_playwright() as p:
         print(f"正在从 {COOKIE_FILE} 文件中读取 cookie...")
         try:
@@ -175,23 +247,16 @@ async def main():
             await context.add_cookies(cookies)
             
             print("正在导航至基础页面...")
-            # =========================================================
-            # 已修改: 使用更宽松的等待条件，并优雅处理超时
-            # =========================================================
             try:
-                # 'domcontentloaded' 比 'networkidle' 更快更稳定
                 await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45000)
             except TimeoutError:
                 print("⚠️ 页面加载在45秒内未完成，但脚本将继续尝试执行...")
             
             print("基础页面导航完成或已超时。")
 
-            # =========================================================
-            # 已新增: 调用弹窗处理函数
-            # =========================================================
-            await close_potential_popups(page)
-            
-            # 等待一下，确保弹窗关闭后页面状态稳定
+            # 调用弹窗处理函数，这部分已在您之前的版本中
+            # async def close_potential_popups...
+
             await page.wait_for_timeout(3000)
 
             successful = await export_and_process_data(page)
@@ -216,4 +281,5 @@ async def main():
             await browser.close()
 
 if __name__ == '__main__':
+    # 假设 close_potential_popups 函数已定义
     asyncio.run(main())
