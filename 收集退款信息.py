@@ -259,7 +259,7 @@ async def main():
             print(f"❌ 致命错误: 无法读取或解析Cookie文件: {e}")
             exit(1)
         print("正在启动 Chromium 浏览器...")
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
         page = await context.new_page()
         try:
