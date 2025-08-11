@@ -94,7 +94,8 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
             elif col_name == '评价时间':
                 try:
                     dt_object = pd.to_datetime(value)
-                    fields_data[col_name] = int(dt_object.timestamp() * 1000)
+                    dt_object_beijing = dt_object_naive.tz_localize('Asia/Shanghai', ambiguous='infer')
+                    fields_data[col_name] = int(dt_object_beijing.timestamp() * 1000)
                 except (ValueError, TypeError):
                     fields_data[col_name] = None
             else:
@@ -303,6 +304,7 @@ async def main():
 # 确保主程序被调用
 if __name__ == '__main__':
     asyncio.run(main())
+
 
 
 
