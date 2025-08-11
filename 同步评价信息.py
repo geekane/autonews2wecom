@@ -8,18 +8,15 @@ from playwright.async_api import async_playwright, Page, TimeoutError, expect
 import lark_oapi as lark
 from lark_oapi.api.bitable.v1 import *
 
-# --- 基础配置 ---
 COOKIE_FILE = '来客.json'
 BASE_URL = 'https://life.douyin.com/p/life_comment/management?groupid=1768205901316096'
 EXPORT_FILE_NAME = "评价记录.xlsx"
 ERROR_SCREENSHOT_FILE = "error_screenshot.png"
 
-# --- 飞书多维表格 API 配置 ---
 FEISHU_APP_ID = os.environ.get("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
 FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
 FEISHU_TABLE_ID = "tblqaCztMg19H545"
-
 
 async def delete_all_records_from_bitable(client: lark.Client):
     """
@@ -94,12 +91,13 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
             elif col_name == '评价时间':
                 try:
                     dt_object = pd.to_datetime(value)
-                    dt_object_beijing = dt_object_naive.tz_localize('Asia/Shanghai', ambiguous='infer')
+                    dt_object_beijing = dt_object.tz_localize('Asia/Shanghai', ambiguous='infer')
                     fields_data[col_name] = int(dt_object_beijing.timestamp() * 1000)
                 except (ValueError, TypeError):
                     fields_data[col_name] = None
             else:
                 fields_data[col_name] = str(value)
+                
         record = AppTableRecord.builder().fields(fields_data).build()
         records_to_create.append(record)
     batch_size = 500
@@ -304,6 +302,7 @@ async def main():
 # 确保主程序被调用
 if __name__ == '__main__':
     asyncio.run(main())
+
 
 
 
