@@ -101,6 +101,7 @@ async def main():
                     removed = sorted(list(set(KNOWN_AGENTS) - set(scraped_names)))
                     
                     msg_parts = ["【抖音来客】客服名单变更提醒！\n"]
+                    msg_parts.append(f"🔗 查看详情确认是否需要删除新增客服: https://life.douyin.com/cs/web/distributary/group?accountId=1768205901316096&conGroupId=536920&groupId=1768205901316096&lifeAccountId=7241078611527075855")
                     if added: msg_parts.append(f"🔴 新增客服:\n" + "\n".join(f"  + {name}" for name in added))
                     if removed: msg_parts.append(f"🔵 移除客服:\n" + "\n".join(f"  - {name}" for name in removed))
                     msg_parts.append(f"\n✨ 当前最新名单 ({len(scraped_names)}人):\n" + "\n".join(f"  • {name}" for name in scraped_names))
