@@ -140,7 +140,7 @@ async def export_and_process_data(page: Page):
         await page.wait_for_timeout(1000)
         print("步骤 3: 点击 '导出评价' 弹窗标题...")
         await page.locator("div").filter(has_text=re.compile(r"^导出评价$")).nth(1).click()
-        await page.wait_for_timeout(1000)
+        await page.wait_for_timeout(5000)
         print("步骤 4: 点击日期范围选择器...")
         await page.locator("div:nth-child(2) > .byted-popper-trigger > .byted-input-wrapper > .byted-input-inner__wrapper").click()
         await page.wait_for_timeout(1000)
@@ -304,6 +304,7 @@ async def main():
 # 确保主程序被调用
 if __name__ == '__main__':
     asyncio.run(main())
+
 
 
 
