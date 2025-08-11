@@ -74,32 +74,54 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
     if total_rows == 0:
         print("没有需要写入的新数据。")
         return
+
     print("正在准备所有待上传的记录...")
     records_to_create = []
+
+    # 自动检测实际的“评价时间”列名，以防万一它包含空格等
+    actual_time_column_name = None
+    for col in df.columns:
+        if "评价时间" in col:
+            actual_time_column_name = col
+            break
+
     for index, row in df.iterrows():
         fields_data = {}
         for col_name in df.columns:
             value = row[col_name]
+            
             if pd.isna(value):
                 fields_data[col_name] = None
                 continue
+
             if col_name == '用户等级':
                 try:
                     fields_data[col_name] = int(value)
                 except (ValueError, TypeError):
                     fields_data[col_name] = None
-            elif col_name == '评价时间':
+
+            elif col_name == actual_time_column_name:
                 try:
-                    dt_object = pd.to_datetime(value)
-                    dt_object_beijing = dt_object.tz_localize('Asia/Shanghai', ambiguous='infer')
+                    # 【最终配置】根据您提供的格式 '2025-08-11 09:25:59' 设置
+                    date_format_string = '%Y-%m-%d %H:%M:%S'
+                    dt_object = pd.to_datetime(value, format=date_format_string)
+                    
+                    # 将这个无时区信息的对象本地化为北京时间
+                    dt_object_beijing = dt_object.tz_localize('Asia/Shanghai')
+                    
+                    # 转换为飞书多维表格要求的毫秒级时间戳
                     fields_data[col_name] = int(dt_object_beijing.timestamp() * 1000)
-                except (ValueError, TypeError):
+
+                except (ValueError, TypeError) as e:
+                    # 如果转换失败，打印出错误和导致错误的值
+                    print(f"❌ '评价时间' 字段转换失败: {e}. 无法使用格式 '{date_format_string}' 解析的值是: '{value}'")
                     fields_data[col_name] = None
             else:
                 fields_data[col_name] = str(value)
                 
         record = AppTableRecord.builder().fields(fields_data).build()
         records_to_create.append(record)
+        
     batch_size = 500
     success_count = 0
     for i in range(0, len(records_to_create), batch_size):
@@ -109,17 +131,19 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
             request_body = BatchCreateAppTableRecordRequestBody.builder().records(chunk).build()
             request: BatchCreateAppTableRecordRequest = BatchCreateAppTableRecordRequest.builder().app_token(FEISHU_APP_TOKEN).table_id(FEISHU_TABLE_ID).request_body(request_body).build()
             response: BatchCreateAppTableRecordResponse = client.bitable.v1.app_table_record.batch_create(request)
+            
             if not response.success():
                 lark.logger.error(f"❌ 批次写入失败, code: {response.code}, msg: {response.msg}")
             else:
                 num_succeeded_in_batch = len(response.data.records)
                 success_count += num_succeeded_in_batch
                 lark.logger.info(f"✅ 批次写入成功，新增 {num_succeeded_in_batch} 条记录。")
+
         except Exception as e:
             print(f"❌ 在处理批次时发生SDK或网络异常: {e}")
+            
     print(f"--- 飞书多维表格批量写入完成 ---")
     print(f"总计 {total_rows} 条记录，成功写入 {success_count} 条。")
-
 
 async def export_and_process_data(page: Page):
     """
@@ -145,7 +169,7 @@ async def export_and_process_data(page: Page):
         
         # 步骤 5-6: 选择日期 (保持不变)
         print("步骤 5: 选择开始日期为当月 '1' 号...")
-        await page.locator("div").filter(has_text=re.compile(r"^1$")).nth(2).click()(force=True)
+        await page.locator("div").filter(has_text=re.compile(r"^1$")).nth(2).click()
         await page.wait_for_timeout(2000)
         print(f"步骤 6: 选择结束日期为 '今天'...")
         await page.locator("div.byted-date-today:not(.byted-date-grid-prev):not(.byted-date-grid-next)").click()
@@ -261,7 +285,7 @@ async def main():
             exit(1)
 
         print("正在启动 Chromium 浏览器...")
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         context = await browser.new_context()
         page = await context.new_page()
 
@@ -302,4 +326,3 @@ async def main():
 # 确保主程序被调用
 if __name__ == '__main__':
     asyncio.run(main())
-
