@@ -6,9 +6,7 @@ on:
 
   # 2. 定时执行 (使用 cron 语法)
   schedule:
-    # '0 * * * *' 表示在每小时的 0 分执行一次。
-    # GitHub Actions 的定时任务可能会有最多15分钟的延迟，这是正常现象。
-    - cron: '0 * * * *'
+    - cron: '0 2,7 * * *'
 
   push:
     branches:
