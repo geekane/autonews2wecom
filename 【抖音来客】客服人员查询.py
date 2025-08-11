@@ -130,11 +130,7 @@ async def main():
                     logging.error(f"尝试保存截图时发生错误: {screenshot_e}")
             else:
                 logging.warning("Page 对象不存在或已关闭，无法进行截图。")
-
-            # 【修改】移除此处的企业微信通知调用，因为我们不希望在失败时收到通知
-            # send_wechat_notification(wechat_webhook_url, error_msg)
-
-            # 【新增】以非零退出码结束程序，这会告诉 GitHub Actions 当前步骤是“失败”的
+                
             sys.exit(1)
 
         finally:
