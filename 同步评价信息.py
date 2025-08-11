@@ -145,7 +145,7 @@ async def export_and_process_data(page: Page):
         
         # 步骤 5-6: 选择日期 (保持不变)
         print("步骤 5: 选择开始日期为当月 '1' 号...")
-        await page.locator("div").filter(has_text=re.compile(r"^1$")).nth(2).click()
+        await page.locator("div").filter(has_text=re.compile(r"^1$")).nth(2).click()(force=True)
         await page.wait_for_timeout(2000)
         print(f"步骤 6: 选择结束日期为 '今天'...")
         await page.locator("div.byted-date-today:not(.byted-date-grid-prev):not(.byted-date-grid-next)").click()
@@ -302,3 +302,4 @@ async def main():
 # 确保主程序被调用
 if __name__ == '__main__':
     asyncio.run(main())
+
