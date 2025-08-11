@@ -11,7 +11,7 @@ on:
       - main
     paths:
       - '收集退款信息.py'
-      - '.github/workflows/main.yml'
+      - '.github/workflows/【抖音来客】收集退款信息.yml'
 
 jobs:
   sync-refund-data:
@@ -27,10 +27,6 @@ jobs:
       - name: 安装 Python 依赖
         run: |
           pip install playwright==1.53.0 pandas openpyxl lark-oapi
-
-      - name: 下载并缓存浏览器
-        # 虽然镜像已包含浏览器，但明确执行此命令可以确保浏览器是最新的且被Playwright正确识别
-        run: playwright install --with-deps chromium
 
       - name: 运行自动化脚本
         env:
