@@ -493,7 +493,12 @@ class CliRunner:
             await expect(men_dian_tab).to_be_visible(timeout=15000)
             await men_dian_tab.click()
             logging.info("   ✔ [成功] 已点击 '门店' 选项卡。")
-            await page.wait_for_timeout(2000)
+            await page.wait_for_timeout(2000
+
+            try:
+                await page.locator("div[id^='venus_poptip_'], div[role='dialog']").get_by_text("跳过", exact=True).click(timeout=2000)
+            except Exception:
+                pass
 
             logging.info("   - 步骤 2/3: 点击 '查看全部门店' 按钮...")
             view_all_button = page.locator("#PoiOverviewAndTrendViewAllStoresButton")
