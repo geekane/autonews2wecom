@@ -502,10 +502,6 @@ class CliRunner:
             logging.info("   ✔ [成功] 已点击 '查看全部门店' 按钮。")
             await page.wait_for_load_state("networkidle", timeout=45000)
             logging.info("   ✔ [成功] '查看全部门店' 页面已加载完成。")
-
-            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-            # ★★★ 【最终核心修改】强制等待5秒后点击导出 ★★★
-            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
             
             logging.info("   - 步骤 3/3: 准备点击 '导出数据' 并等待下载...")
             export_button = page.get_by_role("button", name="导出数据")
