@@ -474,7 +474,7 @@ class CliRunner:
             logging.info("   ✔ [成功] 网站页面加载完成。")
             
             logging.info("--- 开始灵活处理各类引导/确认弹窗 ---")
-            popup_texts_to_click = ["关闭", "跳过", "我知道了"]
+            popup_texts_to_click = ["知道了", "下一步", "去体验", "我知道了"]
             for text in popup_texts_to_click:
                 for _ in range(3):
                     try:
