@@ -32,4 +32,4 @@ jobs:
           DOUYIN_APP_SECRET: ${{ secrets.DOUYIN_APP_SECRET }}     # <-- 已修改
           DOUYIN_ACCOUNT_ID: ${{ secrets.DOUYIN_ACCOUNT_ID }}
           WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
-        run: python 【抖音来客】商品对应门店数量监控,py
+        run: python 【抖音来客】商品对应门店数量监控.py
