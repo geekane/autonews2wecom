@@ -1,10 +1,18 @@
 name: 抖音商品门店数量监控
 
 on:
+  # 触发器1：定时触发，每5分钟运行一次
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '*/5 * * * *'
   
+  # 触发器2：手动触发
   workflow_dispatch:
+
+  # 触发器3：当指定文件被推送到仓库时触发
+  push:
+    paths:
+      - '.github/workflows/monitor.yml' # 当工作流文件本身被修改时
+      - '【抖音来客】商品对应门店数量监控.py' # 当Python脚本被修改时
 
 jobs:
   run-monitor:
@@ -17,6 +25,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      
+      - name: Cache POI counts
+        id: cache-poi
+        uses: actions/cache@v4
+        with:
+          path: poi_count_cache.pkl
+          # 使用分支名作为恢复键的一部分，确保主分支的缓存不会被测试分支覆盖
+          key: ${{ runner.os }}-poi-cache-${{ github.ref_name }}
+          restore-keys: |
+            ${{ runner.os }}-poi-cache-${{ github.ref_name }}
 
       - name: Install dependencies
         run: |
@@ -24,12 +42,11 @@ jobs:
           pip install requests
 
       - name: Run monitor script
-        # --- 核心修改：使用新的Secret名称 ---
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-          DOUYIN_APP_ID: ${{ secrets.DOUYIN_APP_ID }}           # <-- 已修改
-          DOUYIN_APP_SECRET: ${{ secrets.DOUYIN_APP_SECRET }}     # <-- 已修改
+          DOUYIN_APP_ID: ${{ secrets.DOUYIN_APP_ID }}
+          DOUYIN_APP_SECRET: ${{ secrets.DOUYIN_APP_SECRET }}
           DOUYIN_ACCOUNT_ID: ${{ secrets.DOUYIN_ACCOUNT_ID }}
           WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
-        run: python 【抖音来客】商品对应门店数量监控.py
+        run: python "【抖音来客】商品对应门店数量监控.py"
