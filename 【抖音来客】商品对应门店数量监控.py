@@ -1,214 +1,232 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
 import requests
-import time
-import threading
 import json
+import os
+import logging
+import sys
 
-# --- 配置信息 ---
-CLIENT_KEY = "awbeykzyos7kbidv"
-CLIENT_SECRET = "4575440b156ecbe144284e4f69d284a2"
-ACCOUNT_ID = "7241078611527075855"
+# --- 日志配置 ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# 用于缓存 access_token
-token_cache = {
-    "access_token": None,
-    "expires_at": 0
-}
+# --- 飞书配置 ---
+FEISHU_APP_ID = os.environ.get("FEISHU_APP_ID")
+FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
+FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
+FEISHU_TABLE_ID = "tbl6jUYvV6TXXOZ2"
 
-def get_douyin_access_token():
-    """获取或刷新抖音的 client_access_token"""
-    now = time.time()
-    if token_cache["access_token"] and token_cache["expires_at"] > now + 60:
-        return token_cache["access_token"]
+# --- 抖音配置 (已按要求修改) ---
+DOUYIN_APP_ID = os.environ.get("DOUYIN_APP_ID")
+DOUYIN_APP_SECRET = os.environ.get("DOUYIN_APP_SECRET")
+DOUYIN_ACCOUNT_ID = os.environ.get("DOUYIN_ACCOUNT_ID")
 
-    url = "https://open.douyin.com/oauth/client_token/"
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "grant_type": "client_credential",
-        "client_key": CLIENT_KEY,
-        "client_secret": CLIENT_SECRET
-    }
+# --- 企业微信机器人配置 ---
+WECOM_WEBHOOK_URL = os.environ.get("WECOM_WEBHOOK_URL")
+
+# --- 监控阈值配置 ---
+POI_THRESHOLD = 100
+
+# --- 缓存字典 (用于存储Token) ---
+token_cache = {}
+
+def check_secrets():
+    """检查所有必需的密钥是否已配置"""
+    required_secrets = [
+        "FEISHU_APP_ID", "FEISHU_APP_SECRET",
+        "DOUYIN_APP_ID", "DOUYIN_APP_SECRET", "DOUYIN_ACCOUNT_ID", # <-- 已修改
+        "WECOM_WEBHOOK_URL"
+    ]
+    missing_secrets = [secret for secret in required_secrets if not globals()[secret]]
+    if missing_secrets:
+        logging.error(f"启动失败：缺少以下环境变量/密钥: {', '.join(missing_secrets)}")
+        sys.exit(1)
+    logging.info("所有密钥均已配置。")
+
+def get_feishu_tenant_access_token():
+    """获取飞书 tenant_access_token"""
+    if token_cache.get("feishu_token"):
+        return token_cache["feishu_token"]
+
+    url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+    payload = {"app_id": FEISHU_APP_ID, "app_secret": FEISHU_APP_SECRET}
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
-        data = response.json().get("data", {})
-        
-        if data.get("error_code") == 0:
-            access_token = data.get("access_token")
-            expires_in = data.get("expires_in")
-            token_cache["access_token"] = access_token
-            token_cache["expires_at"] = now + expires_in
-            return access_token
+        data = response.json()
+        if data.get("code") == 0:
+            token = data.get("tenant_access_token")
+            token_cache["feishu_token"] = token
+            logging.info("成功获取飞书 tenant_access_token。")
+            return token
         else:
-            error_msg = f"获取Token失败: {data.get('description')}"
-            messagebox.showerror("API错误", error_msg)
+            logging.error(f"获取飞书Token失败: {data.get('msg')}")
             return None
     except requests.exceptions.RequestException as e:
-        error_msg = f"网络请求错误: {e}"
-        messagebox.showerror("网络错误", error_msg)
+        logging.error(f"获取飞书Token时网络错误: {e}")
         return None
 
-def get_product_by_id(product_ids_str):
-    """根据商品ID直接查询商品数据"""
-    access_token = get_douyin_access_token()
-    if not access_token:
-        return {"error": "无法获取 access_token"}
+def get_douyin_client_token():
+    """获取抖音 client_token"""
+    if token_cache.get("douyin_token"):
+        return token_cache["douyin_token"]
+        
+    url = "https://open.douyin.com/oauth/client_token/"
+    # --- 核心修改：使用新的变量名 ---
+    payload = {
+        "grant_type": "client_credential",
+        "client_key": DOUYIN_APP_ID, # <-- 已修改
+        "client_secret": DOUYIN_APP_SECRET # <-- 已修改
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        data = response.json().get("data", {})
+        if data.get("error_code") == 0:
+            token = data.get("access_token")
+            token_cache["douyin_token"] = token
+            logging.info("成功获取抖音 client_token。")
+            return token
+        else:
+            logging.error(f"获取抖音Token失败: {data.get('description')}")
+            return None
+    except requests.exceptions.RequestException as e:
+        logging.error(f"获取抖音Token时网络错误: {e}")
+        return None
 
-    # --- 核心修改：使用新的API接口 ---
-    api_url = "https://open.douyin.com/goodlife/v1/goods/product/online/get/"
-    headers = {"access-token": access_token}
-    
-    # --- 核心修改：使用 product_ids 参数 ---
-    # 将输入的字符串（可能包含逗号）直接传递
-    params = {
-        "account_id": ACCOUNT_ID,
-        "product_ids": product_ids_str,
+def get_monitored_products(feishu_token):
+    """从飞书多维表格获取需要监控的商品ID列表"""
+    url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/search"
+    headers = {"Authorization": f"Bearer {feishu_token}"}
+    payload = {
+        "filter": {
+            "conjunction": "and",
+            "conditions": [{
+                "field_name": "是否监控",
+                "operator": "is",
+                "value": ["是"]
+            }]
+        }
     }
     
     try:
-        response = requests.get(api_url, headers=headers, params=params, timeout=15)
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
         response.raise_for_status()
-        api_data = response.json()
-
-        if api_data.get("BaseResp", {}).get("StatusCode") != 0:
-             return {"error": api_data.get("BaseResp", {}).get("StatusMessage"), "raw_json": api_data}
-
-        # --- 核心修改：解析 product_onlines 字段 ---
-        products = api_data.get("data", {}).get("product_onlines", [])
-        
-        processed_results = []
-        for product_info in products:
-            product_data = product_info.get("product", {})
-            poi_list = product_data.get("pois", [])
-            poi_ids = [poi.get("poi_id") for poi in poi_list if poi.get("poi_id")]
-
-            processed_results.append({
-                "product_id": product_data.get("product_id"),
-                "product_name": product_data.get("product_name"),
-                "poi_ids": poi_ids
-            })
-        
-        return {"success": processed_results, "raw_json": api_data}
-
+        data = response.json()
+        if data.get("code") == 0:
+            items = data.get("data", {}).get("items", [])
+            product_ids = [
+                item['fields'].get('商品ID') for item in items if '商品ID' in item['fields']
+            ]
+            logging.info(f"从飞书获取到 {len(product_ids)} 个待监控的商品ID。")
+            return product_ids
+        else:
+            logging.error(f"查询飞书记录失败: {data.get('msg')}")
+            return []
     except requests.exceptions.RequestException as e:
-        return {"error": f"查询商品时网络错误: {e}", "raw_json": {"error": str(e)}}
+        logging.error(f"查询飞书记录时网络错误: {e}")
+        return []
 
+def get_douyin_product_details(douyin_token, product_id):
+    """根据商品ID查询抖音商品详情，并返回门店数量和商品名称"""
+    url = "https://open.douyin.com/goodlife/v1/goods/product/online/get/"
+    headers = {"access-token": douyin_token}
+    params = {"account_id": DOUYIN_ACCOUNT_ID, "product_ids": product_id}
+    
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
 
-class App:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("抖音商品ID查询POI工具 (精确版)")
-        self.root.geometry("800x650")
-
-        main_frame = ttk.Frame(root, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        paned_window = ttk.PanedWindow(main_frame, orient=tk.VERTICAL)
-        paned_window.pack(fill=tk.BOTH, expand=True)
-
-        top_frame = ttk.Frame(paned_window, padding=5)
-        paned_window.add(top_frame, weight=1)
-
-        search_frame = ttk.Frame(top_frame)
-        search_frame.pack(fill=tk.X, pady=5)
-        
-        # --- 界面文本优化 ---
-        ttk.Label(search_frame, text="输入商品ID (多个请用英文逗号,隔开):").pack(side=tk.LEFT, padx=(0, 5))
-        self.search_entry = ttk.Entry(search_frame)
-        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.search_entry.bind("<Return>", self.start_search)
-
-        self.search_button = ttk.Button(search_frame, text="查询", command=self.start_search)
-        self.search_button.pack(side=tk.LEFT, padx=(5, 0))
-
-        results_frame = ttk.Labelframe(top_frame, text="查询结果", padding=5)
-        results_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        self.results_text = tk.Text(results_frame, wrap=tk.WORD, state="disabled", height=10)
-        scrollbar_res = ttk.Scrollbar(results_frame, command=self.results_text.yview)
-        self.results_text.config(yscrollcommand=scrollbar_res.set)
-        
-        scrollbar_res.pack(side=tk.RIGHT, fill=tk.Y)
-        self.results_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        bottom_frame = ttk.Frame(paned_window, padding=5)
-        paned_window.add(bottom_frame, weight=1)
-        
-        json_frame = ttk.Labelframe(bottom_frame, text="完整的API返回结果 (JSON)", padding=5)
-        json_frame.pack(fill=tk.BOTH, expand=True)
-
-        self.json_text = tk.Text(json_frame, wrap=tk.WORD, state="disabled", height=10)
-        scrollbar_json = ttk.Scrollbar(json_frame, command=self.json_text.yview)
-        self.json_text.config(yscrollcommand=scrollbar_json.set)
-
-        scrollbar_json.pack(side=tk.RIGHT, fill=tk.Y)
-        self.json_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        self.status_var = tk.StringVar()
-        self.status_var.set("准备就绪")
-        ttk.Label(main_frame, textvariable=self.status_var, anchor=tk.W).pack(fill=tk.X, side=tk.BOTTOM)
-
-    def start_search(self, event=None):
-        query = self.search_entry.get().strip()
-        if not query:
-            messagebox.showwarning("输入错误", "请输入要查询的商品ID。")
-            return
-
-        self.search_button.config(state="disabled")
-        self.status_var.set(f"正在查询ID: {query}...")
-        self.update_text_widget(self.results_text, "正在查询中，请稍候...\n")
-        self.update_text_widget(self.json_text, "")
-
-        thread = threading.Thread(target=self.run_search_in_thread, args=(query,))
-        thread.daemon = True
-        thread.start()
-
-    def run_search_in_thread(self, query):
-        # 使用新的函数
-        results_data = get_product_by_id(query)
-        self.root.after(0, self.display_results, results_data)
-
-    def display_results(self, results_data):
-        self.search_button.config(state="normal")
-        
-        raw_json = results_data.get("raw_json", {"info": "无返回内容"})
-        formatted_json = json.dumps(raw_json, indent=2, ensure_ascii=False)
-        self.update_text_widget(self.json_text, formatted_json)
-        
-        if "error" in results_data:
-            self.status_var.set("查询失败")
-            self.update_text_widget(self.results_text, f"查询失败: {results_data['error']}\n")
-            return
-
-        results = results_data.get("success", [])
-        if not results:
-            self.status_var.set("查询完成，未找到该ID对应的商品。")
-            self.update_text_widget(self.results_text, "查询成功，但未返回任何商品信息。请检查ID是否正确，或该商品是否属于可查询范围。\n")
-            return
+        if data.get("BaseResp", {}).get("StatusCode") == 0:
+            products = data.get("data", {}).get("product_onlines", [])
+            if not products:
+                return 0, "未找到商品"
             
-        self.status_var.set(f"查询完成，找到 {len(results)} 条结果。")
-        
-        display_text = ""
-        for item in results:
-            display_text += f"商品名称: {item['product_name']}\n"
-            display_text += f"商品ID: {item['product_id']}\n"
-            if item['poi_ids']:
-                display_text += f"关联门店ID (POI IDs) - 共 {len(item['poi_ids'])} 家:\n"
-                display_text += "\n".join([f"  - {pid}" for pid in item['poi_ids']]) + "\n"
-            else:
-                display_text += "关联门店ID (POI IDs): 未找到\n"
-            display_text += "="*50 + "\n"
-        
-        self.update_text_widget(self.results_text, display_text)
+            product_data = products[0].get("product", {})
+            product_name = product_data.get("product_name", "未知商品名称")
+            poi_list = product_data.get("pois", [])
+            return len(poi_list), product_name
+        else:
+            error_msg = data.get("BaseResp", {}).get("StatusMessage", "未知抖音API错误")
+            logging.warning(f"查询抖音商品ID {product_id} 失败: {error_msg}")
+            return -1, "查询失败"
+    except requests.exceptions.RequestException as e:
+        logging.error(f"查询抖音商品ID {product_id} 时网络错误: {e}")
+        return -1, "网络错误"
 
-    def update_text_widget(self, text_widget, content):
-        text_widget.config(state="normal")
-        text_widget.delete("1.0", tk.END)
-        text_widget.insert(tk.END, content)
-        text_widget.config(state="disabled")
+def send_wechat_notification(webhook_url, message):
+    """发送企业微信机器人通知"""
+    if not webhook_url:
+        logging.warning("未配置有效的企业微信 Webhook URL，跳过发送通知。")
+        return
+    
+    payload = {
+        "msgtype": "text",
+        "text": {
+            "content": message,
+            "mentioned_list": ["@all"]
+        }
+    }
+    headers = {"Content-Type": "application/json"}
+
+    logging.info("正在发送企业微信通知...")
+    try:
+        response = requests.post(webhook_url, headers=headers, data=json.dumps(payload), timeout=15)
+        response.raise_for_status()
+        response_json = response.json()
+        if response_json.get("errcode") == 0:
+            logging.info("企业微信通知发送成功。")
+        else:
+            logging.error(f"企业微信通知发送失败: {response_json.get('errmsg', '未知错误')}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"发送企业微信通知时发生网络错误: {e}")
+    except Exception as e: 
+        logging.error(f"发送企业微信通知时发生未知异常: {e}", exc_info=True)
+
+def main():
+    """主执行函数"""
+    check_secrets()
+    
+    feishu_token = get_feishu_tenant_access_token()
+    if not feishu_token:
+        sys.exit(1)
+        
+    product_ids_to_monitor = get_monitored_products(feishu_token)
+    if not product_ids_to_monitor:
+        logging.info("没有需要监控的商品，任务结束。")
+        return
+
+    douyin_token = get_douyin_client_token()
+    if not douyin_token:
+        sys.exit(1)
+
+    alert_messages = []
+    for pid in product_ids_to_monitor:
+        logging.info(f"正在检查商品ID: {pid}...")
+        poi_count, product_name = get_douyin_product_details(douyin_token, pid)
+        
+        if poi_count == -1:
+            message = (
+                f"🚨 查询失败: 商品 `{product_name}` (ID: {pid})\n"
+                f"- 原因: {product_name}"
+            )
+            alert_messages.append(message)
+            continue
+
+        logging.info(f"商品 '{product_name}' (ID: {pid}) 当前关联门店数量: {poi_count}")
+        
+        if poi_count < POI_THRESHOLD:
+            message = (
+                f"🚨 门店数量预警: 商品 `{product_name}`\n"
+                f"- ID: {pid}\n"
+                f"- 当前数量: {poi_count} 家\n"
+                f"- 预警阈值: < {POI_THRESHOLD} 家"
+            )
+            alert_messages.append(message)
+
+    if alert_messages:
+        full_message = "【抖音商品门店数量监控警报】\n\n" + "\n\n".join(alert_messages)
+        send_wechat_notification(WECOM_WEBHOOK_URL, full_message)
+    else:
+        logging.info("所有受监控的商品门店数量均正常，无需报警。")
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = App(root)
-    root.mainloop()
+    main()
