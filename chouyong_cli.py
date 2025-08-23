@@ -73,10 +73,10 @@ class CliRunner:
     # ==============================================================================
 
     def _init_feishu_client(self):
-        app_id = self.configs.get("feishu_app_id")
-        app_secret = self.configs.get("feishu_app_secret")
+        app_id = os.environ.get("FEISHU_APP_ID")
+        app_secret = os.environ.get("FEISHU_APP_SECRET")
         if not app_id or not app_secret:
-            logging.error("飞书配置错误。")
+            logging.error("飞书配置错误: 请确保设置了 FEISHU_APP_ID 和 FEISHU_APP_SECRET 环境变量。")
             return False
         logging.info("正在初始化飞书客户端...")
         self.feishu_client = lark.Client.builder().app_id(app_id).app_secret(app_secret).log_level(lark.LogLevel.WARNING).build()
@@ -524,8 +524,6 @@ class CliRunner:
         logging.info("==========================================================")
         
         feishu_config = {
-            "app_id": "cli_a8ad5b52783b901c",
-            "app_secret": "DK8advnsYeChNF0yltKvKeqiQiYiAnyC",
             "app_token": "MslRbdwPca7P6qsqbqgcvpBGnRh",
             "table_id": "tbluVbrXLRUmfouv"
         }
