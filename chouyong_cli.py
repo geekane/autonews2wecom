@@ -49,39 +49,39 @@ class CliRunner:
         logging.info("正在从环境变量加载配置...")
         configs = {}
         
-        # 飞书配置
+        # 飞书配置 - 只从环境变量获取原始yml中定义的变量
         configs["feishu_app_id"] = os.getenv("FEISHU_APP_ID")
         configs["feishu_app_secret"] = os.getenv("FEISHU_APP_SECRET")
-        configs["feishu_app_token"] = os.getenv("FEISHU_APP_TOKEN")
-        configs["feishu_table_id"] = os.getenv("FEISHU_TABLE_ID")
-        configs["feishu_field_name"] = os.getenv("FEISHU_FIELD_NAME", "商品ID")
-        configs["get_commission_source_field"] = os.getenv("GET_COMMISSION_SOURCE_FIELD", "商品ID")
-        configs["get_commission_target_field"] = os.getenv("GET_COMMISSION_TARGET_FIELD", "佣金比例")
+        configs["feishu_app_token"] = "MslRbdwPca7P6qsqbqgcvpBGnRh"  # 硬编码的 app_token
+        configs["feishu_table_id"] = "tblyKop71MJbXThq"  # 硬编码的 table_id
+        configs["feishu_field_name"] = "商品ID"  # 硬编码的字段名
+        configs["get_commission_source_field"] = "商品ID"  # 硬编码的源字段名
+        configs["get_commission_target_field"] = "佣金比例"  # 硬编码的目标字段名
         
-        # 抖音配置
+        # 抖音配置 - 只从环境变量获取原始yml中定义的变量
         configs["douyin_key"] = os.getenv("DOUYIN_APP_ID")
         configs["douyin_secret"] = os.getenv("DOUYIN_APP_SECRET")
         configs["douyin_account_id"] = os.getenv("DOUYIN_ACCOUNT_ID")
         
-        # POI表格配置
-        configs["poi_app_token"] = os.getenv("POI_APP_TOKEN", "MslRbdwPca7P6qsqbqgcvpBGnRh")
-        configs["poi_table_id"] = os.getenv("POI_TABLE_ID", "tblyKop71MJbXThq")
-        configs["poi_id_field_name"] = os.getenv("POI_ID_FIELD_NAME", "ID")
+        # POI表格配置 - 全部硬编码
+        configs["poi_app_token"] = "MslRbdwPca7P6qsqbqgcvpBGnRh"
+        configs["poi_table_id"] = "tblyKop71MJbXThq"
+        configs["poi_id_field_name"] = "ID"
         
-        # 其他配置
-        configs["poi_batch_size"] = int(os.getenv("POI_BATCH_SIZE", "20"))
-        configs["feishu_max_workers"] = int(os.getenv("FEISHU_MAX_WORKERS", "5"))
-        configs["max_retries"] = int(os.getenv("MAX_RETRIES", "3"))
+        # 其他配置 - 全部硬编码，使用默认值
+        configs["poi_batch_size"] = 20
+        configs["feishu_max_workers"] = 5
+        configs["max_retries"] = 3
         
-        # 佣金配置
-        configs["commission_online"] = os.getenv("COMMISSION_ONLINE", "0")
-        configs["commission_offline"] = os.getenv("COMMISSION_OFFLINE", "0")
-        configs["commission_zengliang"] = os.getenv("COMMISSION_ZENGLIANG", "0")
-        configs["commission_zhiren"] = os.getenv("COMMISSION_ZHIREN", "0")
+        # 佣金配置 - 全部硬编码，使用默认值
+        configs["commission_online"] = "0"
+        configs["commission_offline"] = "0"
+        configs["commission_zengliang"] = "0"
+        configs["commission_zhiren"] = "0"
         
-        # 验证必要配置
+        # 验证必要配置 - 只验证原始yml中定义的环境变量
         required_configs = [
-            "feishu_app_id", "feishu_app_secret", "feishu_app_token", "feishu_table_id",
+            "feishu_app_id", "feishu_app_secret",
             "douyin_key", "douyin_secret", "douyin_account_id"
         ]
         
