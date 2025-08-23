@@ -22,7 +22,6 @@ except ImportError as e:
     print(f"致命错误: 缺少 '{missing_lib}' 库。请运行 'pip install -r requirements.txt' 后重试。")
     sys.exit(1)
 
-
 COOKIE_FILE = "林客.json"
 LOG_DIR = "logs"
 DEBUG_DIR = "debug_artifacts"
@@ -47,85 +46,51 @@ class CliRunner:
         self.feishu_client = None
 
     def load_configs(self):
-        logging.info("正在加载配置...")
+        logging.info("正在从环境变量加载配置...")
         configs = {}
         
-        # 调试：打印所有环境变量
-        logging.debug("当前所有环境变量:")
-        for key, value in os.environ.items():
-            if 'FEISHU' in key or 'DOUYIN' in key:
-                logging.debug(f"  {key}={value[:10]}..." if value and len(value) > 10 else f"  {key}={value}")
+        # 飞书配置
+        configs["feishu_app_id"] = os.getenv("FEISHU_APP_ID")
+        configs["feishu_app_secret"] = os.getenv("FEISHU_APP_SECRET")
+        configs["feishu_app_token"] = os.getenv("FEISHU_APP_TOKEN")
+        configs["feishu_table_id"] = os.getenv("FEISHU_TABLE_ID")
+        configs["feishu_field_name"] = os.getenv("FEISHU_FIELD_NAME", "商品ID")
+        configs["get_commission_source_field"] = os.getenv("GET_COMMISSION_SOURCE_FIELD", "商品ID")
+        configs["get_commission_target_field"] = os.getenv("GET_COMMISSION_TARGET_FIELD", "佣金比例")
         
-        # 从环境变量获取飞书配置
-        feishu_app_id = os.environ.get("FEISHU_APP_ID")
-        feishu_app_secret = os.environ.get("FEISHU_APP_SECRET")
+        # 抖音配置
+        configs["douyin_key"] = os.getenv("DOUYIN_APP_ID")
+        configs["douyin_secret"] = os.getenv("DOUYIN_APP_SECRET")
+        configs["douyin_account_id"] = os.getenv("DOUYIN_ACCOUNT_ID")
         
-        # 从环境变量获取抖音配置
-        douyin_key = os.environ.get("DOUYIN_APP_ID")
-        douyin_secret = os.environ.get("DOUYIN_APP_SECRET")
-        douyin_account_id = os.environ.get("DOUYIN_ACCOUNT_ID")
+        # POI表格配置
+        configs["poi_app_token"] = os.getenv("POI_APP_TOKEN", "MslRbdwPca7P6qsqbqgcvpBGnRh")
+        configs["poi_table_id"] = os.getenv("POI_TABLE_ID", "tblyKop71MJbXThq")
+        configs["poi_id_field_name"] = os.getenv("POI_ID_FIELD_NAME", "ID")
         
-        logging.debug(f"获取到的飞书配置: FEISHU_APP_ID={'已设置' if feishu_app_id else '未设置'}, FEISHU_APP_SECRET={'已设置' if feishu_app_secret else '未设置'}")
-        logging.debug(f"获取到的抖音配置: DOUYIN_APP_ID={'已设置' if douyin_key else '未设置'}, DOUYIN_APP_SECRET={'已设置' if douyin_secret else '未设置'}, DOUYIN_ACCOUNT_ID={'已设置' if douyin_account_id else '未设置'}")
+        # 其他配置
+        configs["poi_batch_size"] = int(os.getenv("POI_BATCH_SIZE", "20"))
+        configs["feishu_max_workers"] = int(os.getenv("FEISHU_MAX_WORKERS", "5"))
+        configs["max_retries"] = int(os.getenv("MAX_RETRIES", "3"))
         
-        # 如果环境变量中没有设置，尝试从 .env 文件加载
-        if not feishu_app_id or not feishu_app_secret or not douyin_key or not douyin_secret or not douyin_account_id:
-            logging.info("环境变量中未找到部分配置，尝试从 .env 文件加载...")
-            try:
-                from dotenv import load_dotenv
-                load_dotenv()
-                feishu_app_id = os.environ.get("FEISHU_APP_ID")
-                feishu_app_secret = os.environ.get("FEISHU_APP_SECRET")
-                douyin_key = os.environ.get("DOUYIN_APP_ID")
-                douyin_secret = os.environ.get("DOUYIN_APP_SECRET")
-                douyin_account_id = os.environ.get("DOUYIN_ACCOUNT_ID")
-                logging.info(f"从 .env 文件加载后: FEISHU_APP_ID={'已设置' if feishu_app_id else '未设置'}, FEISHU_APP_SECRET={'已设置' if feishu_app_secret else '未设置'}")
-                logging.info(f"DOUYIN_APP_ID={'已设置' if douyin_key else '未设置'}, DOUYIN_APP_SECRET={'已设置' if douyin_secret else '未设置'}, DOUYIN_ACCOUNT_ID={'已设置' if douyin_account_id else '未设置'}")
-            except ImportError:
-                logging.warning("未安装 python-dotenv 库，无法从 .env 文件加载配置")
+        # 佣金配置
+        configs["commission_online"] = os.getenv("COMMISSION_ONLINE", "0")
+        configs["commission_offline"] = os.getenv("COMMISSION_OFFLINE", "0")
+        configs["commission_zengliang"] = os.getenv("COMMISSION_ZENGLIANG", "0")
+        configs["commission_zhiren"] = os.getenv("COMMISSION_ZHIREN", "0")
         
-        configs["feishu_app_id"] = feishu_app_id
-        configs["feishu_app_secret"] = feishu_app_secret
-        configs["douyin_key"] = douyin_key
-        configs["douyin_secret"] = douyin_secret
-        configs["douyin_account_id"] = douyin_account_id
+        # 验证必要配置
+        required_configs = [
+            "feishu_app_id", "feishu_app_secret", "feishu_app_token", "feishu_table_id",
+            "douyin_key", "douyin_secret", "douyin_account_id"
+        ]
         
-        # 设置其他默认值
-        configs["feishu_app_token"] = "MslRbdwPca7P6qsqbqgcvpBGnRh"
-        configs["feishu_poi_table_id"] = "tblyKop71MJbXThq"  # POI表格ID
-        configs["feishu_product_table_id"] = "tbl0ErHhu8L4fAbN"  # 商品ID表格ID
-        configs["feishu_field_name"] = "商品ID"
-        configs["get_commission_source_field"] = "商品ID"
-        configs["get_commission_target_field"] = "佣金比例"
-        configs["poi_batch_size"] = 20
-        configs["feishu_max_workers"] = 5
-        configs["max_retries"] = 3
-        configs["commission_online"] = "0"
-        configs["commission_offline"] = "0"
-        configs["commission_zengliang"] = "0"
-        configs["commission_zhiren"] = "0"
-        
-        # 检查必需的配置
-        required_configs = ["feishu_app_id", "feishu_app_secret", "douyin_key", "douyin_secret", "douyin_account_id"]
-        missing_configs = [key for key in required_configs if not configs.get(key)]
-        
+        missing_configs = [config for config in required_configs if not configs.get(config)]
         if missing_configs:
-            logging.error(f"缺少必需的环境变量: {', '.join(missing_configs)}")
-            logging.error("请确保已正确设置以下环境变量:")
-            logging.error("- FEISHU_APP_ID: 您的飞书应用ID")
-            logging.error("- FEISHU_APP_SECRET: 您的飞书应用密钥")
-            logging.error("- DOUYIN_APP_ID: 您的抖音应用ID")
-            logging.error("- DOUYIN_APP_SECRET: 您的抖音应用密钥")
-            logging.error("- DOUYIN_ACCOUNT_ID: 您的抖音账号ID")
-            logging.error("或者在项目根目录创建 .env 文件，内容如下：")
-            logging.error("FEISHU_APP_ID=您的飞书应用ID")
-            logging.error("FEISHU_APP_SECRET=您的飞书应用密钥")
-            logging.error("DOUYIN_APP_ID=您的抖音应用ID")
-            logging.error("DOUYIN_APP_SECRET=您的抖音应用密钥")
-            logging.error("DOUYIN_ACCOUNT_ID=您的抖音账号ID")
+            logging.error(f"缺少必要的环境变量配置: {', '.join(missing_configs)}")
             sys.exit(1)
             
-        logging.info("配置加载成功。")
+        logging.info("环境变量配置加载成功。")
         return configs
 
     # ==============================================================================
@@ -148,12 +113,8 @@ class CliRunner:
         payload = {"client_key": douyin_configs['douyin_key'], "client_secret": douyin_configs['douyin_secret'], "grant_type": "client_credential"}
         headers = {"Content-Type": "application/json"}
         logging.info("开始获取抖音 Client Token...")
-        logging.debug(f"请求URL: {url}")
-        logging.debug(f"请求参数: {json.dumps(payload, indent=2)}")
         try:
             response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
-            logging.debug(f"响应状态码: {response.status_code}")
-            logging.debug(f"响应内容: {response.text}")
             response.raise_for_status()
             data = response.json()
             if data.get("data") and "access_token" in data["data"]:
@@ -162,18 +123,16 @@ class CliRunner:
                 return True
             else:
                 error_msg = data.get("data", {}).get("description", "获取Token失败")
-                error_code = data.get("data", {}).get("error_code", "未知错误码")
-                logging.error(f"获取抖音Token失败: {error_msg} (错误码: {error_code})")
-                logging.error(f"完整响应: {json.dumps(data, indent=2, ensure_ascii=False)}")
+                logging.error(f"获取抖音Token失败: {error_msg}")
                 return False
         except requests.RequestException as e:
             logging.error(f"请求抖音Token时出错: {e}")
             return False
 
     def _get_poi_ids_from_feishu_table(self):
-        poi_app_token = "MslRbdwPca7P6qsqbqgcvpBGnRh"
-        poi_table_id = "tblyKop71MJbXThq"
-        poi_id_field_name = "ID"
+        poi_app_token = self.configs.get("poi_app_token")
+        poi_table_id = self.configs.get("poi_table_id")
+        poi_id_field_name = self.configs.get("poi_id_field_name")
         logging.info(f"开始从飞书POI表格 (Table ID: {poi_table_id}) 获取门店POI ID...")
         if not self.feishu_client:
             logging.error("飞书客户端未初始化，无法获取POI ID。")
@@ -336,14 +295,13 @@ class CliRunner:
 
     def _get_all_existing_product_ids_from_feishu(self):
         field_name = self.configs['feishu_field_name']
-        table_id = self.configs['feishu_product_table_id']  # 使用商品ID表格ID
-        logging.info(f"开始从飞书获取已存在的商品ID，目标表格: '{table_id}'，目标列: '{field_name}'...")
+        logging.info(f"开始从飞书获取已存在的商品ID，目标列: '{field_name}'...")
         existing_ids = set()
         page_token = None
         while True:
             try:
                 request_body = SearchAppTableRecordRequestBody.builder().field_names([field_name]).build()
-                request_builder = SearchAppTableRecordRequest.builder().app_token(self.configs['feishu_app_token']).table_id(table_id).page_size(500).request_body(request_body)
+                request_builder = SearchAppTableRecordRequest.builder().app_token(self.configs['feishu_app_token']).table_id(self.configs['feishu_table_id']).page_size(500).request_body(request_body)
                 if page_token: request_builder.page_token(page_token)
                 request = request_builder.build()
                 response = self.feishu_client.bitable.v1.app_table_record.search(request)
@@ -591,10 +549,10 @@ class CliRunner:
         logging.info("==========================================================")
         
         feishu_config = {
-            "app_id": "cli_a8ad5b52783b901c",
-            "app_secret": "DK8advnsYeChNF0yltKvKeqiQiYiAnyC",
-            "app_token": "MslRbdwPca7P6qsqbqgcvpBGnRh",
-            "table_id": "tbluVbrXLRUmfouv"
+            "app_id": os.getenv("LIFE_DATA_FEISHU_APP_ID", "cli_a8ad5b52783b901c"),
+            "app_secret": os.getenv("LIFE_DATA_FEISHU_APP_SECRET", "DK8advnsYeChNF0yltKvKeqiQiYiAnyC"),
+            "app_token": os.getenv("LIFE_DATA_FEISHU_APP_TOKEN", "MslRbdwPca7P6qsqbqgcvpBGnRh"),
+            "table_id": os.getenv("LIFE_DATA_FEISHU_TABLE_ID", "tbluVbrXLRUmfouv")
         }
         cookie_file_for_life_data = '来客.json'
         target_url = "https://www.life-data.cn/store/my/chain/list?groupid=1768205901316096"
@@ -736,13 +694,6 @@ class CliRunner:
                 "douyin_secret": self.configs.get("douyin_secret"), 
                 "douyin_account_id": self.configs.get("douyin_account_id")
             }
-            logging.info(f"抖音配置: douyin_key={douyin_configs['douyin_key'][:5] if douyin_configs.get('douyin_key') else 'None'}..., douyin_secret={douyin_configs['douyin_secret'][:5] if douyin_configs.get('douyin_secret') else 'None'}..., douyin_account_id={douyin_configs.get('douyin_account_id')}")
-            
-            # 检查抖音配置是否完整
-            if not all(douyin_configs.values()):
-                logging.error("抖音配置不完整，请检查配置。")
-                return
-                
             if not self._get_douyin_client_token(douyin_configs): return
             
             existing_feishu_ids = self._get_all_existing_product_ids_from_feishu()
@@ -777,10 +728,10 @@ class CliRunner:
                 records_to_create = [AppTableRecord.builder().fields({self.configs['feishu_field_name']: str(pid)}).build() for pid in ids_to_add]
                 for j in range(0, len(records_to_create), 500):
                     record_batch = records_to_create[j:j+500]
-                    logging.info(f"  向飞书商品ID表格写入数据... (部分 {j//500 + 1})")
-                    add_result = self._add_records_to_feishu_table(record_batch, self.configs['feishu_app_token'], self.configs['feishu_product_table_id'])
+                    logging.info(f"  向飞书写入数据... (部分 {j//500 + 1})")
+                    add_result = self._add_records_to_feishu_table(record_batch, self.configs['feishu_app_token'], self.configs['feishu_table_id'])
                     if not add_result["success"]:
-                        logging.error(f"  写入飞书商品ID表格失败: {add_result.get('message')}"); break
+                        logging.error(f"  写入飞书失败: {add_result.get('message')}"); break
                     else:
                         existing_feishu_ids.update(ids_to_add)
             
