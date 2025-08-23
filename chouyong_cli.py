@@ -16,7 +16,20 @@ try:
     import pandas as pd
     import requests
     import lark_oapi as lark
-    from lark_oapi.api.bitable.v1 import *
+    from lark_oapi.api.bitable.v1 import (
+        GetAppTableRequest,
+        SearchAppTableRecordRequestBody,
+        SearchAppTableRecordRequest,
+        Condition,
+        FilterInfo,
+        BatchCreateAppTableRecordRequestBody,
+        BatchCreateAppTableRecordRequest,
+        AppTableRecord,
+        UpdateAppTableRecordRequest,
+        ListAppTableRecordRequest,
+        BatchDeleteAppTableRecordRequest,
+        BatchDeleteAppTableRecordRequestBody
+    )
 except ImportError as e:
     missing_lib = e.name
     print(f"致命错误: 缺少 '{missing_lib}' 库。请运行 'pip install -r requirements.txt' 后重试。")
