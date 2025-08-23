@@ -46,9 +46,6 @@ jobs:
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-          DOUYIN_KEY: ${{ secrets.DOUYIN_KEY }}
-          DOUYIN_SECRET: ${{ secrets.DOUYIN_SECRET }}
-          DOUYIN_ACCOUNT_ID: ${{ secrets.DOUYIN_ACCOUNT_ID }}
         run: |
           echo "环境变量设置完成。"
 
