@@ -47,32 +47,34 @@ class CliRunner:
         self.feishu_client = None
 
     def load_configs(self):
-        logging.info("正在从环境变量加载配置...")
+        logging.info("正在加载配置...")
         configs = {}
         
-        # 从环境变量获取配置
+        # 从环境变量获取飞书配置
         configs["feishu_app_id"] = os.environ.get("FEISHU_APP_ID")
         configs["feishu_app_secret"] = os.environ.get("FEISHU_APP_SECRET")
-        configs["douyin_key"] = os.environ.get("DOUYIN_KEY")
-        configs["douyin_secret"] = os.environ.get("DOUYIN_SECRET")
-        configs["douyin_account_id"] = os.environ.get("DOUYIN_ACCOUNT_ID")
         
-        # 设置默认值
-        configs["feishu_app_token"] = os.environ.get("FEISHU_APP_TOKEN", "MslRbdwPca7P6qsqbqgcvpBGnRh")
-        configs["feishu_table_id"] = os.environ.get("FEISHU_TABLE_ID", "tblKop71MJbXThq")
-        configs["feishu_field_name"] = os.environ.get("FEISHU_FIELD_NAME", "商品ID")
-        configs["get_commission_source_field"] = os.environ.get("GET_COMMISSION_SOURCE_FIELD", "商品ID")
-        configs["get_commission_target_field"] = os.environ.get("GET_COMMISSION_TARGET_FIELD", "佣金比例")
-        configs["poi_batch_size"] = int(os.environ.get("POI_BATCH_SIZE", "20"))
-        configs["feishu_max_workers"] = int(os.environ.get("FEISHU_MAX_WORKERS", "5"))
-        configs["max_retries"] = int(os.environ.get("MAX_RETRIES", "3"))
-        configs["commission_online"] = os.environ.get("COMMISSION_ONLINE", "0")
-        configs["commission_offline"] = os.environ.get("COMMISSION_OFFLINE", "0")
-        configs["commission_zengliang"] = os.environ.get("COMMISSION_ZENGLIANG", "0")
-        configs["commission_zhiren"] = os.environ.get("COMMISSION_ZHIREN", "0")
+        # 硬编码抖音配置
+        configs["douyin_key"] = "awrpc4x87q4t8f5n"
+        configs["douyin_secret"] = "c3296447c7d2a5e9e5c4e3d8a2b1f9e8"
+        configs["douyin_account_id"] = "7241078611527075855"
+        
+        # 设置其他默认值
+        configs["feishu_app_token"] = "MslRbdwPca7P6qsqbqgcvpBGnRh"
+        configs["feishu_table_id"] = "tblKop71MJbXThq"
+        configs["feishu_field_name"] = "商品ID"
+        configs["get_commission_source_field"] = "商品ID"
+        configs["get_commission_target_field"] = "佣金比例"
+        configs["poi_batch_size"] = 20
+        configs["feishu_max_workers"] = 5
+        configs["max_retries"] = 3
+        configs["commission_online"] = "0"
+        configs["commission_offline"] = "0"
+        configs["commission_zengliang"] = "0"
+        configs["commission_zhiren"] = "0"
         
         # 检查必需的配置
-        required_configs = ["feishu_app_id", "feishu_app_secret", "douyin_key", "douyin_secret", "douyin_account_id"]
+        required_configs = ["feishu_app_id", "feishu_app_secret"]
         missing_configs = [key for key in required_configs if not configs.get(key)]
         
         if missing_configs:
