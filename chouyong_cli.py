@@ -495,6 +495,12 @@ class CliRunner:
         logging.info("========== 开始执行步骤0: 同步 Life-Data.cn 数据 ==========")
         logging.info("==========================================================")
         
+        feishu_config = {
+            "app_id": "cli_d5b783b901c",
+            "app_secret": "DK8adNF0yltKQiYiAnyC",
+            "app_token": "MslRbdwPca7P6qsqbqgcvpBGnRh",
+            "table_id": "tbluVbrXLRUmfouv"
+        }
         cookie_file_for_life_data = '来客.json'
         target_url = "https://www.life-data.cn/store/my/chain/list?groupid=1768205901316096"
         download_dir = "downloads"
