@@ -48,6 +48,9 @@ jobs:
           echo "config.json 创建成功。"
 
       - name: 7. 运行 Python 脚本
+        env:
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
         run: python chouyong_cli.py
 
       - name: 8. 上传日志与调试文件
