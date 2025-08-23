@@ -22,6 +22,7 @@ except ImportError as e:
     print(f"致命错误: 缺少 '{missing_lib}' 库。请运行 'pip install -r requirements.txt' 后重试。")
     sys.exit(1)
 
+CONFIG_FILE = "config.json"
 COOKIE_FILE = "林客.json"
 LOG_DIR = "logs"
 DEBUG_DIR = "debug_artifacts"
@@ -46,52 +47,13 @@ class CliRunner:
         self.feishu_client = None
 
     def load_configs(self):
-        logging.info("正在从环境变量加载配置...")
-        configs = {}
-        
-        # 飞书配置 - 只从环境变量获取原始yml中定义的变量
-        configs["feishu_app_id"] = os.getenv("FEISHU_APP_ID")
-        configs["feishu_app_secret"] = os.getenv("FEISHU_APP_SECRET")
-        configs["feishu_app_token"] = "MslRbdwPca7P6qsqbqgcvpBGnRh"  # 硬编码的 app_token
-        configs["feishu_table_id"] = "tblyKop71MJbXThq"  # 硬编码的 table_id
-        configs["feishu_field_name"] = "商品ID"  # 硬编码的字段名
-        configs["get_commission_source_field"] = "商品ID"  # 硬编码的源字段名
-        configs["get_commission_target_field"] = "佣金比例"  # 硬编码的目标字段名
-        
-        # 抖音配置 - 只从环境变量获取原始yml中定义的变量
-        configs["douyin_key"] = os.getenv("DOUYIN_APP_ID")
-        configs["douyin_secret"] = os.getenv("DOUYIN_APP_SECRET")
-        configs["douyin_account_id"] = os.getenv("DOUYIN_ACCOUNT_ID")
-        
-        # POI表格配置 - 全部硬编码
-        configs["poi_app_token"] = "MslRbdwPca7P6qsqbqgcvpBGnRh"
-        configs["poi_table_id"] = "tblyKop71MJbXThq"
-        configs["poi_id_field_name"] = "ID"
-        
-        # 其他配置 - 全部硬编码，使用默认值
-        configs["poi_batch_size"] = 20
-        configs["feishu_max_workers"] = 5
-        configs["max_retries"] = 3
-        
-        # 佣金配置 - 全部硬编码，使用默认值
-        configs["commission_online"] = "0"
-        configs["commission_offline"] = "0"
-        configs["commission_zengliang"] = "0"
-        configs["commission_zhiren"] = "0"
-        
-        # 验证必要配置 - 只验证原始yml中定义的环境变量
-        required_configs = [
-            "feishu_app_id", "feishu_app_secret",
-            "douyin_key", "douyin_secret", "douyin_account_id"
-        ]
-        
-        missing_configs = [config for config in required_configs if not configs.get(config)]
-        if missing_configs:
-            logging.error(f"缺少必要的环境变量配置: {', '.join(missing_configs)}")
+        logging.info(f"正在从 {CONFIG_FILE} 加载配置...")
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logging.error(f"加载配置文件 {CONFIG_FILE} 失败: {e}")
             sys.exit(1)
-            
-        logging.info("环境变量配置加载成功。")
-        return configs
 
     # ==============================================================================
     # 通用及辅助函数
@@ -130,9 +92,9 @@ class CliRunner:
             return False
 
     def _get_poi_ids_from_feishu_table(self):
-        poi_app_token = self.configs.get("poi_app_token")
-        poi_table_id = self.configs.get("poi_table_id")
-        poi_id_field_name = self.configs.get("poi_id_field_name")
+        poi_app_token = "MslRbdwPca7P6qsqbqgcvpBGnRh"
+        poi_table_id = "tblyKop71MJbXThq"
+        poi_id_field_name = "ID"
         logging.info(f"开始从飞书POI表格 (Table ID: {poi_table_id}) 获取门店POI ID...")
         if not self.feishu_client:
             logging.error("飞书客户端未初始化，无法获取POI ID。")
@@ -549,10 +511,10 @@ class CliRunner:
         logging.info("==========================================================")
         
         feishu_config = {
-            "app_id": os.getenv("LIFE_DATA_FEISHU_APP_ID", "cli_a8ad5b52783b901c"),
-            "app_secret": os.getenv("LIFE_DATA_FEISHU_APP_SECRET", "DK8advnsYeChNF0yltKvKeqiQiYiAnyC"),
-            "app_token": os.getenv("LIFE_DATA_FEISHU_APP_TOKEN", "MslRbdwPca7P6qsqbqgcvpBGnRh"),
-            "table_id": os.getenv("LIFE_DATA_FEISHU_TABLE_ID", "tbluVbrXLRUmfouv")
+            "app_id": "cli_a8ad5b52783b901c",
+            "app_secret": "DK8advnsYeChNF0yltKvKeqiQiYiAnyC",
+            "app_token": "MslRbdwPca7P6qsqbqgcvpBGnRh",
+            "table_id": "tbluVbrXLRUmfouv"
         }
         cookie_file_for_life_data = '来客.json'
         target_url = "https://www.life-data.cn/store/my/chain/list?groupid=1768205901316096"
