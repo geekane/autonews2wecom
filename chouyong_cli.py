@@ -42,6 +42,7 @@ logging.basicConfig(
 
 class CliRunner:
     def __init__(self):
+        # 这行代码需要调用下面的 load_configs 方法
         self.configs = self.load_configs()
         
         # --- 新增代码开始 ---
@@ -52,9 +53,20 @@ class CliRunner:
         for line in config_str.split('\n'):
             logging.info(line)
         logging.info("=" * 65)
+        # --- 新增代码结束 ---
 
         self.douyin_access_token = None
         self.feishu_client = None
+
+    # !!! --- 把这个方法加回来 --- !!!
+    def load_configs(self):
+        logging.info(f"正在从 {CONFIG_FILE} 加载配置...")
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logging.error(f"加载配置文件 {CONFIG_FILE} 失败: {e}")
+            sys.exit(1)
 
     # ==============================================================================
     # 通用及辅助函数
