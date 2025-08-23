@@ -22,7 +22,7 @@ except ImportError as e:
     print(f"致命错误: 缺少 '{missing_lib}' 库。请运行 'pip install -r requirements.txt' 后重试。")
     sys.exit(1)
 
-CONFIG_FILE = "config.json"
+
 COOKIE_FILE = "林客.json"
 LOG_DIR = "logs"
 DEBUG_DIR = "debug_artifacts"
@@ -47,21 +47,39 @@ class CliRunner:
         self.feishu_client = None
 
     def load_configs(self):
-        logging.info(f"正在从 {CONFIG_FILE} 加载配置...")
+        logging.info("正在从环境变量加载配置...")
         configs = {}
-        try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            configs = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            logging.warning(f"未能正常加载 {CONFIG_FILE}，将依赖环境变量配置。")
-
-    # 环境变量优先覆盖
-        configs['feishu_app_id'] = os.getenv("FEISHU_APP_ID", configs.get("feishu_app_id"))
-        configs['feishu_app_secret'] = os.getenv("FEISHU_APP_SECRET", configs.get("feishu_app_secret"))
-        configs['douyin_key'] = os.getenv("DOUYIN_KEY", configs.get("douyin_key"))
-        configs['douyin_secret'] = os.getenv("DOUYIN_SECRET", configs.get("douyin_secret"))
-        configs['douyin_account_id'] = os.getenv("DOUYIN_ACCOUNT_ID", configs.get("douyin_account_id"))
-
+        
+        # 从环境变量获取配置
+        configs["feishu_app_id"] = os.environ.get("FEISHU_APP_ID")
+        configs["feishu_app_secret"] = os.environ.get("FEISHU_APP_SECRET")
+        configs["douyin_key"] = os.environ.get("DOUYIN_KEY")
+        configs["douyin_secret"] = os.environ.get("DOUYIN_SECRET")
+        configs["douyin_account_id"] = os.environ.get("DOUYIN_ACCOUNT_ID")
+        
+        # 设置默认值
+        configs["feishu_app_token"] = os.environ.get("FEISHU_APP_TOKEN", "MslRbdwPca7P6qsqbqgcvpBGnRh")
+        configs["feishu_table_id"] = os.environ.get("FEISHU_TABLE_ID", "tblKop71MJbXThq")
+        configs["feishu_field_name"] = os.environ.get("FEISHU_FIELD_NAME", "商品ID")
+        configs["get_commission_source_field"] = os.environ.get("GET_COMMISSION_SOURCE_FIELD", "商品ID")
+        configs["get_commission_target_field"] = os.environ.get("GET_COMMISSION_TARGET_FIELD", "佣金比例")
+        configs["poi_batch_size"] = int(os.environ.get("POI_BATCH_SIZE", "20"))
+        configs["feishu_max_workers"] = int(os.environ.get("FEISHU_MAX_WORKERS", "5"))
+        configs["max_retries"] = int(os.environ.get("MAX_RETRIES", "3"))
+        configs["commission_online"] = os.environ.get("COMMISSION_ONLINE", "0")
+        configs["commission_offline"] = os.environ.get("COMMISSION_OFFLINE", "0")
+        configs["commission_zengliang"] = os.environ.get("COMMISSION_ZENGLIANG", "0")
+        configs["commission_zhiren"] = os.environ.get("COMMISSION_ZHIREN", "0")
+        
+        # 检查必需的配置
+        required_configs = ["feishu_app_id", "feishu_app_secret", "douyin_key", "douyin_secret", "douyin_account_id"]
+        missing_configs = [key for key in required_configs if not configs.get(key)]
+        
+        if missing_configs:
+            logging.error(f"缺少必需的环境变量: {', '.join(missing_configs)}")
+            sys.exit(1)
+            
+        logging.info("配置加载成功。")
         return configs
 
     # ==============================================================================
