@@ -50,9 +50,32 @@ class CliRunner:
         logging.info("正在加载配置...")
         configs = {}
         
+        # 调试：打印所有环境变量
+        logging.debug("当前所有环境变量:")
+        for key, value in os.environ.items():
+            if 'FEISHU' in key or 'DOUYIN' in key:
+                logging.debug(f"  {key}={value[:10]}..." if value and len(value) > 10 else f"  {key}={value}")
+        
         # 从环境变量获取飞书配置
-        configs["feishu_app_id"] = os.environ.get("FEISHU_APP_ID")
-        configs["feishu_app_secret"] = os.environ.get("FEISHU_APP_SECRET")
+        feishu_app_id = os.environ.get("FEISHU_APP_ID")
+        feishu_app_secret = os.environ.get("FEISHU_APP_SECRET")
+        
+        logging.debug(f"获取到的飞书配置: FEISHU_APP_ID={'已设置' if feishu_app_id else '未设置'}, FEISHU_APP_SECRET={'已设置' if feishu_app_secret else '未设置'}")
+        
+        # 如果环境变量中没有设置，尝试从 .env 文件加载
+        if not feishu_app_id or not feishu_app_secret:
+            logging.info("环境变量中未找到飞书配置，尝试从 .env 文件加载...")
+            try:
+                from dotenv import load_dotenv
+                load_dotenv()
+                feishu_app_id = os.environ.get("FEISHU_APP_ID")
+                feishu_app_secret = os.environ.get("FEISHU_APP_SECRET")
+                logging.info(f"从 .env 文件加载后: FEISHU_APP_ID={'已设置' if feishu_app_id else '未设置'}, FEISHU_APP_SECRET={'已设置' if feishu_app_secret else '未设置'}")
+            except ImportError:
+                logging.warning("未安装 python-dotenv 库，无法从 .env 文件加载配置")
+        
+        configs["feishu_app_id"] = feishu_app_id
+        configs["feishu_app_secret"] = feishu_app_secret
         
         # 硬编码抖音配置
         configs["douyin_key"] = "awrpc4x87q4t8f5n"
@@ -79,6 +102,10 @@ class CliRunner:
         
         if missing_configs:
             logging.error(f"缺少必需的环境变量: {', '.join(missing_configs)}")
+            logging.error("请确保已正确设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET 环境变量")
+            logging.error("或者在项目根目录创建 .env 文件，内容如下：")
+            logging.error("FEISHU_APP_ID=您的飞书应用ID")
+            logging.error("FEISHU_APP_SECRET=您的飞书应用密钥")
             sys.exit(1)
             
         logging.info("配置加载成功。")
