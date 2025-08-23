@@ -46,6 +46,9 @@ jobs:
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          DOUYIN_APP_ID: ${{ secrets.DOUYIN_APP_ID }}
+          DOUYIN_APP_SECRET: ${{ secrets.DOUYIN_APP_SECRET }}
+          DOUYIN_ACCOUNT_ID: ${{ secrets.DOUYIN_ACCOUNT_ID }}
         run: python chouyong_cli.py
 
       - name: 8. 上传日志与调试文件
