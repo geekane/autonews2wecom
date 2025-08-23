@@ -92,7 +92,7 @@ class CliRunner:
         
         # 设置其他默认值
         configs["feishu_app_token"] = "MslRbdwPca7P6qsqbqgcvpBGnRh"
-        configs["feishu_table_id"] = "tblKop71MJbXThq"
+        configs["feishu_table_id"] = "tblyKop71MJbXThq"
         configs["feishu_field_name"] = "商品ID"
         configs["get_commission_source_field"] = "商品ID"
         configs["get_commission_target_field"] = "佣金比例"
