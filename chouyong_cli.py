@@ -52,7 +52,6 @@ class CliRunner:
         for line in config_str.split('\n'):
             logging.info(line)
         logging.info("=" * 65)
-        # --- 新增代码结束 ---
 
         self.douyin_access_token = None
         self.feishu_client = None
