@@ -17,7 +17,6 @@ try:
     import requests
     import lark_oapi as lark
     from lark_oapi.api.bitable.v1 import (
-        GetAppTableRequest,
         SearchAppTableRecordRequestBody,
         SearchAppTableRecordRequest,
         Condition,
@@ -131,89 +130,34 @@ class CliRunner:
         if not self.feishu_client:
             logging.error("飞书客户端未初始化，无法获取POI ID。")
             return []
-        
-        # 首先获取表格的字段信息，以确定ID字段的类型
-        try:
-            table_request = GetAppTableRequest.builder().app_token(poi_app_token).table_id(poi_table_id).build()
-            table_response = self.feishu_client.bitable.v1.app_table.get(table_request)
-            if not table_response.success():
-                logging.error(f"获取飞书表格信息失败: Code={table_response.code}, Msg={table_response.msg}")
-                return []
-            
-            field_type = None
-            proxy_type = None
-            for field in table_response.data.table.fields:
-                if field.field_name == poi_id_field_name:
-                    field_type = field.type
-                    proxy_type = field.proxy_type if hasattr(field, 'proxy_type') else None
-                    logging.info(f"字段 '{poi_id_field_name}' 类型: {field_type}, 代理类型: {proxy_type}")
-                    break
-            
-            if field_type is None:
-                logging.error(f"未在表格中找到字段 '{poi_id_field_name}'")
-                return []
-            
-            # 检查是否为查找引用类型（类型值为19）
-            is_lookup_reference = (field_type == 19)
-            if is_lookup_reference:
-                logging.info(f"检测到字段 '{poi_id_field_name}' 为查找引用类型，将使用相应的解析方式")
-            
-        except Exception as e:
-            logging.error(f"获取字段信息时发生异常: {e}", exc_info=True)
-            return []
-        
+
         all_poi_ids = []
         page_token = None
         while True:
             try:
                 request_body = SearchAppTableRecordRequestBody.builder().field_names([poi_id_field_name]).build()
-                request_builder = SearchAppTableRecordRequest.builder().app_token(poi_app_token).table_id(poi_table_id).page_size(500).request_body(request_body)
-                if page_token: request_builder.page_token(page_token)
-                request = request_builder.build()
+                request = SearchAppTableRecordRequest.builder().app_token(poi_app_token).table_id(poi_table_id).page_size(500).request_body(request_body).page_token(page_token if page_token else "").build()
                 response = self.feishu_client.bitable.v1.app_table_record.search(request)
+
                 if not response.success():
                     logging.error(f"查询飞书POI表格失败: Code={response.code}, Msg={response.msg}")
                     return []
+
                 items = response.data.items or []
                 for item in items:
-                    if poi_id_field_name in item.fields and item.fields[poi_id_field_name]:
-                        field_value = item.fields[poi_id_field_name]
-                        
-                        # 根据字段类型使用不同的解析方式
-                        if is_lookup_reference:
-                            # 查找引用类型的解析
-                            if isinstance(field_value, list) and len(field_value) > 0:
-                                # 查找引用字段的值结构
-                                lookup_value = field_value[0]
-                                if isinstance(lookup_value, dict):
-                                    # 根据代理类型解析值
-                                    if proxy_type == 1:  # 文本类型
-                                        # 文本类型：值为包含 'text' 和 'type' 的对象
-                                        poi_id_text = lookup_value.get('text', '')
-                                        if poi_id_text:
-                                            all_poi_ids.append(poi_id_text.strip())
-                                    elif proxy_type == 11:  # 人员类型
-                                        # 人员类型：值为包含用户信息的对象
-                                        user_name = lookup_value.get('name', '')
-                                        if user_name:
-                                            all_poi_ids.append(user_name.strip())
-                                    elif proxy_type == 2:  # 数字类型
-                                        # 数字类型：值为数字
-                                        poi_id_value = lookup_value.get('value', '')
-                                        if poi_id_value is not None and poi_id_value != '':
-                                            all_poi_ids.append(str(poi_id_value).strip())
-                                    else:
-                                        # 其他类型，尝试获取text或value
-                                        poi_id_text = lookup_value.get('text', lookup_value.get('value', ''))
-                                        if poi_id_text:
-                                            all_poi_ids.append(str(poi_id_text).strip())
-                        else:
-                            # 原有的普通字段解析方式
-                            if isinstance(field_value, list) and len(field_value) > 0:
-                                poi_id_text = field_value[0].get('text', '')
-                                if poi_id_text:
-                                    all_poi_ids.append(poi_id_text.strip())
-                
+                    if poi_id_field_name not in item.fields or not item.fields[poi_id_field_name]:
+                        continue
+
+                    field_value = item.fields[poi_id_field_name]
+                    
+                    # 统一处理，无论是普通文本列表还是查找引用，都提取第一个元素的text值
+                    if isinstance(field_value, list) and len(field_value) > 0:
+                        first_item = field_value[0]
+                        if isinstance(first_item, dict):
+                            poi_id_text = first_item.get('text', '')
+                            if poi_id_text:
+                                all_poi_ids.append(poi_id_text.strip())
+
                 if response.data.has_more:
                     page_token = response.data.page_token
                 else:
@@ -221,7 +165,7 @@ class CliRunner:
             except Exception as e:
                 logging.error(f"查询飞书POI表格时发生异常: {e}", exc_info=True)
                 return []
-        
+
         if not all_poi_ids:
             logging.error(f"未能从飞书表格 '{poi_table_id}' 的 '{poi_id_field_name}' 列读取到任何POI ID。")
         else:
