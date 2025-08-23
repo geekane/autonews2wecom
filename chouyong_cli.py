@@ -133,7 +133,6 @@ class CliRunner:
 
         all_poi_ids = []
         page_token = None
-        item_count_for_debug = 0
         while True:
             try:
                 request_body = SearchAppTableRecordRequestBody.builder().field_names([poi_id_field_name]).build()
@@ -145,34 +144,28 @@ class CliRunner:
                     return []
 
                 items = response.data.items or []
-                logging.info(f"获取到 {len(items)} 条记录，开始处理...")
-
                 for item in items:
                     if poi_id_field_name not in item.fields or not item.fields[poi_id_field_name]:
                         continue
 
                     field_value = item.fields[poi_id_field_name]
-                    
-                    # 调试日志：打印前5条记录的原始字段值
-                    if item_count_for_debug < 5:
-                        logging.info(f"[调试] 记录 Record ID: {item.record_id}, 原始 '{poi_id_field_name}' 字段值: {field_value}")
-                        item_count_for_debug += 1
+                    value_list = []
 
-                    # 统一处理，无论是普通文本列表还是查找引用，都提取第一个元素的text值
-                    if isinstance(field_value, list) and len(field_value) > 0:
-                        first_item = field_value[0]
+                    # 检查返回的值是字典还是列表
+                    if isinstance(field_value, dict) and 'value' in field_value:
+                        # 如果是字典，从 'value' 键中提取列表
+                        value_list = field_value.get('value')
+                    elif isinstance(field_value, list):
+                        # 如果直接是列表
+                        value_list = field_value
+
+                    # 统一处理提取出的列表
+                    if value_list and isinstance(value_list, list) and len(value_list) > 0:
+                        first_item = value_list[0]
                         if isinstance(first_item, dict):
                             poi_id_text = first_item.get('text', '')
                             if poi_id_text:
                                 all_poi_ids.append(poi_id_text.strip())
-                                logging.debug(f"成功提取并添加ID: {poi_id_text.strip()}")
-                            else:
-                                logging.warning(f"[调试] 字段存在但'text'键为空或不存在于: {first_item}")
-                        else:
-                             logging.warning(f"[调试] 列表的第一个元素不是字典: {first_item}")
-                    else:
-                        logging.warning(f"[调试] 字段值不是预期的列表格式或为空: {field_value}")
-
 
                 if response.data.has_more:
                     page_token = response.data.page_token
