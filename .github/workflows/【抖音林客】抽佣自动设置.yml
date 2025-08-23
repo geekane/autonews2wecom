@@ -47,6 +47,19 @@ jobs:
           echo "$CONFIG_JSON_CONTENT" > config.json
           echo "config.json 创建成功。"
 
+      - name: 6. 创建 config.json（来自 Secret）
+        env:
+          CONFIG_JSON_CONTENT: ${{ secrets.CONFIG_JSON }}
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          DOUYIN_KEY: ${{ secrets.DOUYIN_KEY }}
+          DOUYIN_SECRET: ${{ secrets.DOUYIN_SECRET }}
+          DOUYIN_ACCOUNT_ID: ${{ secrets.DOUYIN_ACCOUNT_ID }}
+        run: |
+          echo "$CONFIG_JSON_CONTENT" > config.json
+          echo "config.json 创建成功（环境变量会覆盖其中的同名配置）。"
+
+
       - name: 7. 运行 Python 脚本
         run: python chouyong_cli.py
 
