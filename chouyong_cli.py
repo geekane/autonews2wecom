@@ -60,12 +60,30 @@ class CliRunner:
     # ==============================================================================
 
     def _init_feishu_client(self):
-        logging.info("正在从环境变量加载飞书 App ID 和 App Secret...")
+        # 加载 App ID
         app_id = os.environ.get("FEISHU_APP_ID")
+        if app_id:
+            logging.info("已从环境变量 'FEISHU_APP_ID' 加载飞书 App ID。")
+        else:
+            app_id = self.configs.get("feishu_app_id")
+            if app_id:
+                logging.info("从 config.json 加载飞书 App ID。")
+            else:
+                logging.error("飞书配置错误: 在环境变量和配置文件中均未找到 'feishu_app_id'。")
+                return False
+
+        # 加载 App Secret
         app_secret = os.environ.get("FEISHU_APP_SECRET")
-        if not app_id or not app_secret:
-            logging.error("飞书配置错误: 环境变量 FEISHU_APP_ID 或 FEISHU_APP_SECRET 未设置。")
-            return False
+        if app_secret:
+            logging.info("已从环境变量 'FEISHU_APP_SECRET' 加载飞书 App Secret。")
+        else:
+            app_secret = self.configs.get("feishu_app_secret")
+            if app_secret:
+                logging.info("从 config.json 加载飞书 App Secret。")
+            else:
+                logging.error("飞书配置错误: 在环境变量和配置文件中均未找到 'feishu_app_secret'。")
+                return False
+
         logging.info("正在初始化飞书客户端...")
         self.feishu_client = lark.Client.builder().app_id(app_id).app_secret(app_secret).log_level(lark.LogLevel.WARNING).build()
         logging.info("飞书客户端初始化成功。")
