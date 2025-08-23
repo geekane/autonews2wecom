@@ -55,22 +55,32 @@ class CliRunner:
             logging.error(f"加载配置文件 {CONFIG_FILE} 失败: {e}")
             sys.exit(1)
 
-        logging.info("正在从环境变量加载 feishu_app_token 和 feishu_table_id...")
-        feishu_app_token = os.environ.get("FEISHU_APP_TOKEN")
-        feishu_table_id = os.environ.get("FEISHU_TABLE_ID")
+        logging.info("尝试从环境变量加载 feishu_app_token 和 feishu_table_id...")
+        
+        env_app_token = os.environ.get("FEISHU_APP_TOKEN")
+        env_table_id = os.environ.get("FEISHU_TABLE_ID")
 
-        if not feishu_app_token:
-            logging.error("环境变量 'FEISHU_APP_TOKEN' 未设置或为空，程序无法继续。")
-            sys.exit(1)
-        if not feishu_table_id:
-            logging.error("环境变量 'FEISHU_TABLE_ID' 未设置或为空，程序无法继续。")
+        if env_app_token:
+            logging.info("从环境变量中找到 FEISHU_APP_TOKEN，将覆盖配置文件中的值。")
+            configs['feishu_app_token'] = env_app_token
+        else:
+            logging.info("环境变量 FEISHU_APP_TOKEN 未设置，将使用 config.json 中的值。")
+
+        if env_table_id:
+            logging.info("从环境变量中找到 FEISHU_TABLE_ID，将覆盖配置文件中的值。")
+            configs['feishu_table_id'] = env_table_id
+        else:
+            logging.info("环境变量 FEISHU_TABLE_ID 未设置，将使用 config.json 中的值。")
+            
+        # Final check
+        if not configs.get('feishu_app_token'):
+            logging.error("配置错误: 'feishu_app_token' 在环境变量和配置文件中均未找到。")
             sys.exit(1)
             
-        logging.info("成功从环境变量加载飞书配置。")
-        
-        configs['feishu_app_token'] = feishu_app_token
-        configs['feishu_table_id'] = feishu_table_id
-        
+        if not configs.get('feishu_table_id'):
+            logging.error("配置错误: 'feishu_table_id' 在环境变量和配置文件中均未找到。")
+            sys.exit(1)
+            
         return configs
 
     # ==============================================================================
