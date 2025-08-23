@@ -50,38 +50,21 @@ class CliRunner:
         logging.info(f"正在从 {CONFIG_FILE} 加载配置...")
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                configs = json.load(f)
+                return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError) as e:
             logging.error(f"加载配置文件 {CONFIG_FILE} 失败: {e}")
             sys.exit(1)
-
-        logging.info("正在从环境变量加载 feishu_app_token 和 feishu_table_id...")
-        feishu_app_token = os.environ.get("FEISHU_APP_TOKEN")
-        feishu_table_id = os.environ.get("FEISHU_TABLE_ID")
-
-        if not feishu_app_token:
-            logging.error("环境变量 'FEISHU_APP_TOKEN' 未设置或为空，程序无法继续。")
-            sys.exit(1)
-        if not feishu_table_id:
-            logging.error("环境变量 'FEISHU_TABLE_ID' 未设置或为空，程序无法继续。")
-            sys.exit(1)
-            
-        logging.info("成功从环境变量加载飞书配置。")
-        
-        configs['feishu_app_token'] = feishu_app_token
-        configs['feishu_table_id'] = feishu_table_id
-        
-        return configs
 
     # ==============================================================================
     # 通用及辅助函数
     # ==============================================================================
 
     def _init_feishu_client(self):
-        app_id = self.configs.get("feishu_app_id")
-        app_secret = self.configs.get("feishu_app_secret")
+        logging.info("正在从环境变量加载飞书 App ID 和 App Secret...")
+        app_id = os.environ.get("FEISHU_APP_ID")
+        app_secret = os.environ.get("FEISHU_APP_SECRET")
         if not app_id or not app_secret:
-            logging.error("飞书配置错误。")
+            logging.error("飞书配置错误: 环境变量 FEISHU_APP_ID 或 FEISHU_APP_SECRET 未设置。")
             return False
         logging.info("正在初始化飞书客户端...")
         self.feishu_client = lark.Client.builder().app_id(app_id).app_secret(app_secret).log_level(lark.LogLevel.WARNING).build()
