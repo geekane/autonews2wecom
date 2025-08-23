@@ -60,27 +60,35 @@ class CliRunner:
         feishu_app_id = os.environ.get("FEISHU_APP_ID")
         feishu_app_secret = os.environ.get("FEISHU_APP_SECRET")
         
+        # 从环境变量获取抖音配置
+        douyin_key = os.environ.get("DOUYIN_APP_ID")
+        douyin_secret = os.environ.get("DOUYIN_APP_SECRET")
+        douyin_account_id = os.environ.get("DOUYIN_ACCOUNT_ID")
+        
         logging.debug(f"获取到的飞书配置: FEISHU_APP_ID={'已设置' if feishu_app_id else '未设置'}, FEISHU_APP_SECRET={'已设置' if feishu_app_secret else '未设置'}")
+        logging.debug(f"获取到的抖音配置: DOUYIN_APP_ID={'已设置' if douyin_key else '未设置'}, DOUYIN_APP_SECRET={'已设置' if douyin_secret else '未设置'}, DOUYIN_ACCOUNT_ID={'已设置' if douyin_account_id else '未设置'}")
         
         # 如果环境变量中没有设置，尝试从 .env 文件加载
-        if not feishu_app_id or not feishu_app_secret:
-            logging.info("环境变量中未找到飞书配置，尝试从 .env 文件加载...")
+        if not feishu_app_id or not feishu_app_secret or not douyin_key or not douyin_secret or not douyin_account_id:
+            logging.info("环境变量中未找到部分配置，尝试从 .env 文件加载...")
             try:
                 from dotenv import load_dotenv
                 load_dotenv()
                 feishu_app_id = os.environ.get("FEISHU_APP_ID")
                 feishu_app_secret = os.environ.get("FEISHU_APP_SECRET")
+                douyin_key = os.environ.get("DOUYIN_APP_ID")
+                douyin_secret = os.environ.get("DOUYIN_APP_SECRET")
+                douyin_account_id = os.environ.get("DOUYIN_ACCOUNT_ID")
                 logging.info(f"从 .env 文件加载后: FEISHU_APP_ID={'已设置' if feishu_app_id else '未设置'}, FEISHU_APP_SECRET={'已设置' if feishu_app_secret else '未设置'}")
+                logging.info(f"DOUYIN_APP_ID={'已设置' if douyin_key else '未设置'}, DOUYIN_APP_SECRET={'已设置' if douyin_secret else '未设置'}, DOUYIN_ACCOUNT_ID={'已设置' if douyin_account_id else '未设置'}")
             except ImportError:
                 logging.warning("未安装 python-dotenv 库，无法从 .env 文件加载配置")
         
         configs["feishu_app_id"] = feishu_app_id
         configs["feishu_app_secret"] = feishu_app_secret
-        
-        # 硬编码抖音配置
-        configs["douyin_key"] = "awrpc4x87q4t8f5n"
-        configs["douyin_secret"] = "c3296447c7d2a5e9e5c4e3d8a2b1f9e8"
-        configs["douyin_account_id"] = "7241078611527075855"
+        configs["douyin_key"] = douyin_key
+        configs["douyin_secret"] = douyin_secret
+        configs["douyin_account_id"] = douyin_account_id
         
         # 设置其他默认值
         configs["feishu_app_token"] = "MslRbdwPca7P6qsqbqgcvpBGnRh"
@@ -97,15 +105,23 @@ class CliRunner:
         configs["commission_zhiren"] = "0"
         
         # 检查必需的配置
-        required_configs = ["feishu_app_id", "feishu_app_secret"]
+        required_configs = ["feishu_app_id", "feishu_app_secret", "douyin_key", "douyin_secret", "douyin_account_id"]
         missing_configs = [key for key in required_configs if not configs.get(key)]
         
         if missing_configs:
             logging.error(f"缺少必需的环境变量: {', '.join(missing_configs)}")
-            logging.error("请确保已正确设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET 环境变量")
+            logging.error("请确保已正确设置以下环境变量:")
+            logging.error("- FEISHU_APP_ID: 您的飞书应用ID")
+            logging.error("- FEISHU_APP_SECRET: 您的飞书应用密钥")
+            logging.error("- DOUYIN_APP_ID: 您的抖音应用ID")
+            logging.error("- DOUYIN_APP_SECRET: 您的抖音应用密钥")
+            logging.error("- DOUYIN_ACCOUNT_ID: 您的抖音账号ID")
             logging.error("或者在项目根目录创建 .env 文件，内容如下：")
             logging.error("FEISHU_APP_ID=您的飞书应用ID")
             logging.error("FEISHU_APP_SECRET=您的飞书应用密钥")
+            logging.error("DOUYIN_APP_ID=您的抖音应用ID")
+            logging.error("DOUYIN_APP_SECRET=您的抖音应用密钥")
+            logging.error("DOUYIN_ACCOUNT_ID=您的抖音账号ID")
             sys.exit(1)
             
         logging.info("配置加载成功。")
@@ -131,8 +147,12 @@ class CliRunner:
         payload = {"client_key": douyin_configs['douyin_key'], "client_secret": douyin_configs['douyin_secret'], "grant_type": "client_credential"}
         headers = {"Content-Type": "application/json"}
         logging.info("开始获取抖音 Client Token...")
+        logging.debug(f"请求URL: {url}")
+        logging.debug(f"请求参数: {json.dumps(payload, indent=2)}")
         try:
             response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
+            logging.debug(f"响应状态码: {response.status_code}")
+            logging.debug(f"响应内容: {response.text}")
             response.raise_for_status()
             data = response.json()
             if data.get("data") and "access_token" in data["data"]:
@@ -141,7 +161,9 @@ class CliRunner:
                 return True
             else:
                 error_msg = data.get("data", {}).get("description", "获取Token失败")
-                logging.error(f"获取抖音Token失败: {error_msg}")
+                error_code = data.get("data", {}).get("error_code", "未知错误码")
+                logging.error(f"获取抖音Token失败: {error_msg} (错误码: {error_code})")
+                logging.error(f"完整响应: {json.dumps(data, indent=2, ensure_ascii=False)}")
                 return False
         except requests.RequestException as e:
             logging.error(f"请求抖音Token时出错: {e}")
@@ -712,6 +734,13 @@ class CliRunner:
                 "douyin_secret": self.configs.get("douyin_secret"), 
                 "douyin_account_id": self.configs.get("douyin_account_id")
             }
+            logging.info(f"抖音配置: douyin_key={douyin_configs['douyin_key'][:5] if douyin_configs.get('douyin_key') else 'None'}..., douyin_secret={douyin_configs['douyin_secret'][:5] if douyin_configs.get('douyin_secret') else 'None'}..., douyin_account_id={douyin_configs.get('douyin_account_id')}")
+            
+            # 检查抖音配置是否完整
+            if not all(douyin_configs.values()):
+                logging.error("抖音配置不完整，请检查配置。")
+                return
+                
             if not self._get_douyin_client_token(douyin_configs): return
             
             existing_feishu_ids = self._get_all_existing_product_ids_from_feishu()
