@@ -48,12 +48,21 @@ class CliRunner:
 
     def load_configs(self):
         logging.info(f"正在从 {CONFIG_FILE} 加载配置...")
+        configs = {}
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logging.error(f"加载配置文件 {CONFIG_FILE} 失败: {e}")
-            sys.exit(1)
+            configs = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            logging.warning(f"未能正常加载 {CONFIG_FILE}，将依赖环境变量配置。")
+
+    # 环境变量优先覆盖
+        configs['feishu_app_id'] = os.getenv("FEISHU_APP_ID", configs.get("feishu_app_id"))
+        configs['feishu_app_secret'] = os.getenv("FEISHU_APP_SECRET", configs.get("feishu_app_secret"))
+        configs['douyin_key'] = os.getenv("DOUYIN_KEY", configs.get("douyin_key"))
+        configs['douyin_secret'] = os.getenv("DOUYIN_SECRET", configs.get("douyin_secret"))
+        configs['douyin_account_id'] = os.getenv("DOUYIN_ACCOUNT_ID", configs.get("douyin_account_id"))
+
+        return configs
 
     # ==============================================================================
     # 通用及辅助函数
