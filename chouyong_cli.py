@@ -92,7 +92,8 @@ class CliRunner:
         
         # 设置其他默认值
         configs["feishu_app_token"] = "MslRbdwPca7P6qsqbqgcvpBGnRh"
-        configs["feishu_table_id"] = "tblyKop71MJbXThq"
+        configs["feishu_poi_table_id"] = "tblyKop71MJbXThq"  # POI表格ID
+        configs["feishu_product_table_id"] = "tbl0ErHhu8L4fAbN"  # 商品ID表格ID
         configs["feishu_field_name"] = "商品ID"
         configs["get_commission_source_field"] = "商品ID"
         configs["get_commission_target_field"] = "佣金比例"
@@ -335,13 +336,14 @@ class CliRunner:
 
     def _get_all_existing_product_ids_from_feishu(self):
         field_name = self.configs['feishu_field_name']
-        logging.info(f"开始从飞书获取已存在的商品ID，目标列: '{field_name}'...")
+        table_id = self.configs['feishu_product_table_id']  # 使用商品ID表格ID
+        logging.info(f"开始从飞书获取已存在的商品ID，目标表格: '{table_id}'，目标列: '{field_name}'...")
         existing_ids = set()
         page_token = None
         while True:
             try:
                 request_body = SearchAppTableRecordRequestBody.builder().field_names([field_name]).build()
-                request_builder = SearchAppTableRecordRequest.builder().app_token(self.configs['feishu_app_token']).table_id(self.configs['feishu_table_id']).page_size(500).request_body(request_body)
+                request_builder = SearchAppTableRecordRequest.builder().app_token(self.configs['feishu_app_token']).table_id(table_id).page_size(500).request_body(request_body)
                 if page_token: request_builder.page_token(page_token)
                 request = request_builder.build()
                 response = self.feishu_client.bitable.v1.app_table_record.search(request)
@@ -775,10 +777,10 @@ class CliRunner:
                 records_to_create = [AppTableRecord.builder().fields({self.configs['feishu_field_name']: str(pid)}).build() for pid in ids_to_add]
                 for j in range(0, len(records_to_create), 500):
                     record_batch = records_to_create[j:j+500]
-                    logging.info(f"  向飞书写入数据... (部分 {j//500 + 1})")
-                    add_result = self._add_records_to_feishu_table(record_batch, self.configs['feishu_app_token'], self.configs['feishu_table_id'])
+                    logging.info(f"  向飞书商品ID表格写入数据... (部分 {j//500 + 1})")
+                    add_result = self._add_records_to_feishu_table(record_batch, self.configs['feishu_app_token'], self.configs['feishu_product_table_id'])
                     if not add_result["success"]:
-                        logging.error(f"  写入飞书失败: {add_result.get('message')}"); break
+                        logging.error(f"  写入飞书商品ID表格失败: {add_result.get('message')}"); break
                     else:
                         existing_feishu_ids.update(ids_to_add)
             
