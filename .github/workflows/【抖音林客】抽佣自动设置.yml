@@ -40,15 +40,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
 
-      
-
-      - name: 6. 运行 Python 脚本
+      - name: 6. 创建 config.json（来自 Secret）
         env:
-          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-          DOUYIN_APP_ID: ${{ secrets.DOUYIN_APP_ID }}
-          DOUYIN_APP_SECRET: ${{ secrets.DOUYIN_APP_SECRET }}
-          DOUYIN_ACCOUNT_ID: ${{ secrets.DOUYIN_ACCOUNT_ID }}
+          CONFIG_JSON_CONTENT: ${{ secrets.CONFIG_JSON }}
+        run: |
+          echo "$CONFIG_JSON_CONTENT" > config.json
+          echo "config.json 创建成功。"
+
+      - name: 7. 运行 Python 脚本
         run: python chouyong_cli.py
 
       - name: 8. 上传日志与调试文件
