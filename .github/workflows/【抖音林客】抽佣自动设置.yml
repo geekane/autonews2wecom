@@ -40,14 +40,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
 
-      - name: 6. 设置环境变量
+      
+
+      - name: 6. 运行 Python 脚本
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-        run: |
-          echo "环境变量设置完成。"
-
-      - name: 7. 运行 Python 脚本
         run: python chouyong_cli.py
 
       - name: 8. 上传日志与调试文件
