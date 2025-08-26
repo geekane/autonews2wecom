@@ -464,17 +464,43 @@ class CliRunner:
 
     async def _fs_batch_add_records(self, app_token: str, table_id: str, dataframe: pd.DataFrame):
         logging.info(f"   - 准备向 Table ID: {table_id} 批量写入 {len(dataframe)} 条新记录...")
+        
+        # 打印Excel文件的列名信息
+        logging.info("   - [调试] Excel文件中的列名:")
+        for col in dataframe.columns:
+            logging.info(f"     * '{col}'")
+        
+        # 打印第一条记录的数据作为示例
+        if not dataframe.empty:
+            logging.info("   - [调试] 第一条记录的数据示例:")
+            first_row = dataframe.iloc[0].to_dict()
+            for col, val in first_row.items():
+                logging.info(f"     * {col}: {val}")
+        
         try:
             for i in range(0, len(dataframe), 500):
                 df_batch = dataframe.iloc[i:i+500]
                 records_to_add = [AppTableRecord.builder().fields(
                     {col: str(val) if pd.notna(val) else "" for col, val in row.to_dict().items()}
                 ).build() for _, row in df_batch.iterrows()]
+                
+                # 打印即将写入飞书的字段名
+                if i == 0 and len(records_to_add) > 0:
+                    logging.info("   - [调试] 即将写入飞书的字段名:")
+                    for field_name in records_to_add[0].fields.keys():
+                        logging.info(f"     * '{field_name}'")
+                
                 req = BatchCreateAppTableRecordRequest.builder().app_token(app_token).table_id(table_id).request_body(
                     BatchCreateAppTableRecordRequestBody.builder().records(records_to_add).build()).build()
                 response = self.feishu_client.bitable.v1.app_table_record.batch_create(req)
                 if not response.success():
                     logging.error(f"❌ [飞书错误] 写入记录失败: Code={response.code}, Msg='{response.msg}'")
+                    
+                    # 打印更详细的错误信息
+                    if response.code == 1254045:  # FieldNameNotFound
+                        logging.error("   - [详细错误] 错误原因: Excel文件中的列名与飞书表格中的字段名不匹配")
+                        logging.error("   - [解决方案] 请检查Excel文件的列名是否与飞书表格中的字段名完全一致（包括大小写和特殊字符）")
+                    
                     return False
                 logging.info(f"   - 成功写入批次 {i//500 + 1} ({len(response.data.records)} 条记录)。")
             logging.info(f"   ✔ [成功] 所有 {len(dataframe)} 条新记录已成功写入。")
