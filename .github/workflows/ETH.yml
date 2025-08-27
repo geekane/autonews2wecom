@@ -18,6 +18,9 @@ jobs:
         with:
           python-version: '3.11'
           
+      - name: 安装依赖
+        run: pip install requests
+          
       - name: 运行价格追踪脚本
         # 设置环境变量并执行 Python 脚本
         env:
