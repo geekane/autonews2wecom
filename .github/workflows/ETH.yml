@@ -16,10 +16,7 @@ jobs:
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # 你可以指定任何你需要的 Python 版本
-
-      - name: 安装依赖
-        run: pip install requests
+          python-version: '3.11'
           
       - name: 运行价格追踪脚本
         # 设置环境变量并执行 Python 脚本
