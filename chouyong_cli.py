@@ -809,7 +809,7 @@ class CliRunner:
                         '线下扫码': self.configs.get('commission_offline', '0'),
                         '增量宝': self.configs.get('commission_zengliang', '0'),
                         '职人账号': self.configs.get('commission_zhiren', '0'),
-                        '获客宝': self.configs.get('commission_zhiren', '0')
+                        '获客卡': '0'
                     }
                     
                     success = await self._set_single_commission(page, pid, commission_values)
