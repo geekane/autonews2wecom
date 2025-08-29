@@ -17,7 +17,7 @@ eth_template_id = os.getenv("ETH_TEMPLATE_ID")
 # --- LLM (AI) 配置 ---
 llm_api_key = os.getenv("LLM_API_KEY", "AIzaSyBfaYYla_WbDyiula0MX7ZpRPChcVbWSx8")
 llm_base_url = "https://gemini.zzh2025.dpdns.org/"
-llm_model = "gemini-2.5-flash-lite"
+llm_model = "gemini-2.5-flash"
 
 # --- 历史数据文件配置 ---
 HISTORY_FILE = 'eth_price_history.json'
@@ -135,59 +135,101 @@ def save_history(history):
     except Exception as e:
         logging.error(f"无法保存历史文件 '{HISTORY_FILE}': {e}")
 
+# 在 eth_api.py 中找到并替换这个函数
 def analyze_with_llm(history, current_price):
-    """使用 LLM 分析历史数据并给出买入/卖出建议。"""
+    """
+    使用 LLM 分析历史数据并给出买入/卖出建议。 (已针对特殊模型进行Prompt优化)
+    """
     if not llm_client:
         logging.warning("LLM 客户端未初始化，跳过 AI 分析。")
         return {"suggestion": "AI分析未启用", "reason": "LLM_API_KEY 未配置。"}
 
     recent_history = history[-100:]
+    
+    # --- 核心修正：改造 Prompt ---
+    # 这个模型似乎对指令的理解比较刻板，我们需要用更明确、更结构化的方式告诉它要做什么。
     prompt = f"""
-    你是一名专业的加密货币数据分析师。... (prompt内容不变)
+    **任务：**
+    作为一名专业的加密货币数据分析师，你的任务是分析给定的以太坊(ETH)历史价格数据和当前价格，并输出一个包含投资建议的JSON对象。
+
+    **输入数据：**
+    1.  **历史价格 (部分):**
+        ```json
+        {json.dumps(recent_history, indent=2)}
+        ```
+    2.  **当前价格:** ${current_price:,.2f}
+
+    **输出要求：**
+    你的输出**必须**是一个严格的、不包含任何额外解释或Markdown标记的JSON对象。JSON对象必须包含以下两个键：
+    -   `"suggestion"`: 值为 "买入", "卖出", 或 "观望" 中的一个。
+    -   `"reason"`: 一个不超过30字的简短中文理由。
+
+    **输出示例：**
+    ```json
+    {{
+      "suggestion": "观望",
+      "reason": "价格近期波动不大，等待更明确的趋势信号。"
+    }}
+    ```
+
+    请严格按照“输出要求”和“输出示例”的格式，立即执行分析并返回结果。
     """
+
     try:
         logging.info("开始调用 LLM进行分析...")
         chat_completion = llm_client.chat.completions.create(
-            messages=[{"role": "system", "content": "你是一名专业的加密货币数据分析师..."}, {"role": "user", "content": prompt}],
+            messages=[
+                {
+                    "role": "system",
+                    "content": "你是一个只输出指定格式JSON的加密货币分析机器人。",
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
             model=llm_model,
             response_format={"type": "json_object"},
             temperature=0.3,
         )
         
-        # --- 关键修正：增加调试日志，并准备修复数据结构问题 ---
         logging.info(f"收到的原始 chat_completion 对象: {chat_completion}")
-        
-        # 假设问题是 choices[0] 是一个 list，我们可以尝试访问 list[0]
-        # 先用一个更安全的方式来访问，避免程序再次崩溃
+
+        # 使用我们之前加固过的、健壮的方式来提取 message content
+        message_obj = None
         if chat_completion.choices and isinstance(chat_completion.choices[0], list):
-             # 如果是非标准结构，例如 [[Choice(...)]]
              if chat_completion.choices[0]:
                  message_obj = chat_completion.choices[0][0].message
-             else:
-                 raise ValueError("AI 返回的 choices[0] 是一个空列表")
         elif chat_completion.choices:
-             # 如果是标准结构 [Choice(...)]
              message_obj = chat_completion.choices[0].message
-        else:
-            raise ValueError("AI 返回了空的 choices 列表")
-            
+        
+        if not message_obj:
+            raise ValueError("AI 返回了空的 message 对象")
+
         response_content = message_obj.content
         logging.info(f"成功提取 LLM 分析结果: {response_content}")
         
-        # 清理并提取纯净的 JSON 字符串 (保留上一轮的修复)
+        # 清理并提取纯净的 JSON 字符串 (保留)
         start_index = response_content.find('{')
         end_index = response_content.rfind('}')
         if start_index != -1 and end_index != -1 and start_index < end_index:
             clean_json_str = response_content[start_index : end_index + 1]
             analysis = json.loads(clean_json_str)
-            return analysis
+            
+            # --- 新增：检查返回的JSON是否包含我们需要的键 ---
+            if 'suggestion' in analysis and 'reason' in analysis:
+                logging.info("JSON 结构验证通过，包含 suggestion 和 reason。")
+                return analysis
+            else:
+                logging.error(f"AI返回的JSON结构不正确，缺少必要的键。收到: {analysis}")
+                raise ValueError("AI返回的JSON结构不正确")
         else:
             raise json.JSONDecodeError("在模型响应中未找到有效的JSON对象", response_content, 0)
 
     except Exception as e:
         logging.error(f"调用 LLM API 或解析结果失败: {e}")
         return {"suggestion": "AI分析失败", "reason": "调用模型时发生错误，请检查服务状态或API密钥。"}
-
+        
 # ==============================================================================
 #  主逻辑执行区
 # ==============================================================================
