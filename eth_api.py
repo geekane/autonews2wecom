@@ -39,7 +39,7 @@ if not all([appID, appSecret, openId, eth_template_id]):
     exit(1)
 
 # ==============================================================================
-#  核心函数定义区 (所有功能函数都在主逻辑 eth_report 之前定义)
+#  核心函数定义区
 # ==============================================================================
 
 def fetch_eth_price_api() -> float | None:
@@ -83,16 +83,9 @@ def get_access_token():
         logging.info("get_access_token 函数结束")
 
 def send_wechat_message(access_token, title, product_name, current_price, suggestion, remark_details):
-    """发送微信模板消息 (已根据您的新要求进行简化)"""
-    logging.info("send_wechat_message 函数开始 (简化版)")
+    """发送微信模板消息 (最终简化版)"""
+    logging.info("send_wechat_message 函数开始 (最终简化版)")
     
-    utc_now = datetime.now(timezone.utc)
-    beijing_time = utc_now.astimezone(timezone(timedelta(hours=8)))
-    formatted_time = beijing_time.strftime('%Y-%m-%d %H:%M')
-
-    # --- 核心修正：将 remark 的多行内容合并为一行，并去掉 color 字段 ---
-    remark_text = f"{title} | 分析理由: {remark_details} | 时间: {formatted_time}"
-
     body = {
         "touser": openId.strip(),
         "template_id": eth_template_id.strip(),
@@ -101,7 +94,8 @@ def send_wechat_message(access_token, title, product_name, current_price, sugges
             "keyword1": { "value": product_name },
             "keyword2": { "value": current_price },
             "keyword3": { "value": suggestion },
-            "remark": { "value": remark_text }
+            # --- 核心修改：remark 的值直接使用 AI 返回的理由 ---
+            "remark": { "value": remark_details }
         }
     }
     
@@ -137,14 +131,13 @@ def save_history(history):
         logging.error(f"无法保存历史文件 '{HISTORY_FILE}': {e}")
 
 def analyze_with_llm(history, current_price):
-    """使用 LLM 分析历史数据并给出买入/卖出建议。 (已根据您的新要求优化Prompt)"""
+    """使用 LLM 分析历史数据并给出买入/卖出建议。"""
     if not llm_client:
         logging.warning("LLM 客户端未初始化，跳过 AI 分析。")
         return {"suggestion": "AI分析未启用", "reason": "LLM_API_KEY 未配置。"}
 
     recent_history = history[-100:]
     
-    # --- 核心修正：修改 Prompt，要求理由更精炼 ---
     prompt = f"""
     **任务：**
     作为一名专业的加密货币数据分析师，你的任务是分析给定的以太坊(ETH)历史价格数据和当前价格，并输出一个包含投资建议的JSON对象。
@@ -257,7 +250,7 @@ def eth_report():
     remark_details = analysis.get('reason', '未能获取分析详情。')
     
     title = f"ETH AI 分析报告：{suggestion}"
-    if eth_price_float < 2100 or eth_price_float > 3800: # 您可以按需调整这里的预警价格
+    if eth_price_float < 2100 or eth_price_float > 3800:
         title = f"价格预警！ETH 现价 {formatted_price}"
         logging.info(f"价格触发提醒条件 (< 2100 or > 3800)。")
     
