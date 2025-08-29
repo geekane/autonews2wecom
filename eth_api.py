@@ -15,7 +15,7 @@ openId = os.getenv("OPENID")
 eth_template_id = os.getenv("ETH_TEMPLATE_ID")
 
 # --- LLM (AI) 配置 ---
-llm_api_key = os.getenv("LLM_API_KEY", "AIzaSyBfaYYla_WbDyiula0MX7ZpRPChcVbWSx8")
+llm_api_key = os.getenv("LLM_API_KEY")
 llm_base_url = "https://gemini.zzh2025.dpdns.org/"
 llm_model = "gemini-2.5-flash-lite"
 
