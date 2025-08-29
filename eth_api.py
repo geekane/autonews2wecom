@@ -211,15 +211,7 @@ def load_history():
             return []
     return []
 
-def save_history(history):
-    """将历史价格数据保存到文件"""
-    try:
-        with open(HISTORY_FILE, 'w') as f:
-            json.dump(history, f, indent=4)
-        logging.info(f"成功将 {len(history)} 条记录保存到 '{HISTORY_FILE}'")
-    except Exception as e:
-        logging.error(f"无法保存历史文件 '{HISTORY_FILE}': {e}")
-
+# 在 eth_api.py 中找到并替换这个函数
 def analyze_with_llm(history, current_price):
     """
     使用 LLM 分析历史数据并给出买入/卖出建议。
@@ -228,10 +220,8 @@ def analyze_with_llm(history, current_price):
         logging.warning("LLM 客户端未初始化，跳过 AI 分析。")
         return {"suggestion": "AI分析未启用", "reason": "LLM_API_KEY 未配置。"}
 
-    # 为了节省 token，我们只传递最近的 100 个点给 LLM
     recent_history = history[-100:]
     
-    # 构建给 LLM 的指令 (Prompt)
     prompt = f"""
     你是一名专业的加密货币数据分析师。请根据下面提供的以太坊（ETH）历史价格数据和当前最新价格，给出一个简明扼要的投资建议。
 
@@ -253,26 +243,32 @@ def analyze_with_llm(history, current_price):
         logging.info("开始调用 LLM进行分析...")
         chat_completion = llm_client.chat.completions.create(
             messages=[
-                {
-                    "role": "system",
-                    "content": "你是一名专业的加密货币数据分析师，你的回答必须是严格的 JSON 格式。",
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
+                {"role": "system", "content": "你是一名专业的加密货币数据分析师，你的回答必须是严格的 JSON 格式。"},
+                {"role": "user", "content": prompt}
             ],
             model=llm_model,
-            response_format={"type": "json_object"}, # 强制要求 JSON 输出
-            temperature=0.3, # 让模型输出更稳定
+            response_format={"type": "json_object"},
+            temperature=0.3,
         )
         
-        response_content = chat_completion.choices[0].message.content
-        logging.info(f"成功获取 LLM 分析结果: {response_content}")
+        response_content = chat_completion.choices.message.content
+        logging.info(f"成功获取 LLM 原始分析结果: {response_content}")
         
-        # 解析 LLM 返回的 JSON 字符串
-        analysis = json.loads(response_content)
-        return analysis
+        # --- 核心修正：清理并提取纯净的 JSON 字符串 ---
+        # 很多模型喜欢用 ```json ... ``` 包裹返回结果，我们需要把它剥掉
+        # 找到第一个 { 和最后一个 } 的位置
+        start_index = response_content.find('{')
+        end_index = response_content.rfind('}')
+        
+        if start_index != -1 and end_index != -1 and start_index < end_index:
+            clean_json_str = response_content[start_index : end_index + 1]
+            logging.info(f"清理后的纯净 JSON: {clean_json_str}")
+            # 解析清理后的 JSON 字符串
+            analysis = json.loads(clean_json_str)
+            return analysis
+        else:
+            # 如果清理后仍然找不到有效的JSON，则手动抛出异常
+            raise json.JSONDecodeError("在模型响应中未找到有效的JSON对象", response_content, 0)
 
     except Exception as e:
         logging.error(f"调用 LLM API 或解析结果失败: {e}")
