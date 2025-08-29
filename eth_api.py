@@ -85,9 +85,12 @@ def get_access_token():
     finally:
         logging.info("get_access_token 函数结束")
 
-def send_wechat_message(access_token, title, suggestion, price_info, remark):
-    """发送包含分析建议的微信模板消息"""
-    logging.info("send_wechat_message 函数开始")
+# 在 eth_api.py 中找到并替换这个函数
+def send_wechat_message(access_token, title, product_name, current_price, suggestion, remark_details):
+    """
+    发送微信模板消息 (已根据您的模板进行精确适配)
+    """
+    logging.info("send_wechat_message 函数开始 (适配版)")
     
     utc_now = datetime.now(timezone.utc)
     beijing_time = utc_now.astimezone(timezone(timedelta(hours=8)))
@@ -97,15 +100,44 @@ def send_wechat_message(access_token, title, suggestion, price_info, remark):
         "touser": openId.strip(),
         "template_id": eth_template_id.strip(),
         "url": "https://www.coingecko.com/zh/%E6%95%B0%E5%AD%97%E8%B4%A7%E5%B8%81/%E4%BB%A5%E5%A4%AA%E5%9D%8A",
+        # miniprogram 字段是可选的，如果不需要跳转小程序可以删除
+        # "miniprogram":{
+        #   "appid":"xiaochengxuappid12345",
+        #   "pagepath":"index?foo=bar"
+        # },
         "data": {
-            "first": {"value": title, "color": "#173177"},
-            "keyword1": {"value": price_info, "color": "#0000FF"},
-            "keyword2": {"value": suggestion, "color": "#FF4500"},
-            "remark": {"value": f"\n{remark}\n报告时间: {formatted_time}", "color": "#808080"}
+            # 您的模板似乎没有顶部的 first 字段，所以我们把它用作标题，并放在 remark 里
+            # "first": { "value": title }, # 您的模板没有这个，注释掉
+
+            # keyword1 对应 “产品名称”
+            "keyword1": {
+                "value": product_name,
+                "color": "#173177"
+            },
+            # keyword2 对应 “当前价格”
+            "keyword2": {
+                "value": current_price,
+                "color": "#FF0000" if "预警" in title else "#0000FF"
+            },
+            # keyword3 对应 “分析建议”
+            "keyword3": {
+                "value": suggestion,
+                "color": "#008000" if "买入" in suggestion else "#FF4500"
+            },
+            # 您的模板没有独立的 remark 字段，我们将标题和分析理由合并放在这里，
+            # 并作为点击“详情”后跳转页面的补充说明。
+            # 如果您的模板有 remark 字段，它会显示在详情上方。
+            "remark": {
+                "value": f"\n{title}\n分析理由: {remark_details}\n报告时间: {formatted_time}",
+                "color": "#808080"
+            }
         }
     }
     
-    logging.info(f"准备发送消息体: {json.dumps(body, ensure_ascii=False)}")
+    # 微信后台模板可能没有配置 remark 字段，如果发送失败，可以尝试删除 remark
+    # 微信后台模板可能将“分析建议”配置为 keyword2，如果还错乱，请尝试调整 keyword 的顺序
+    
+    logging.info(f"准备发送消息体: {json.dumps(body, ensure_ascii=False, indent=2)}")
     url = f'https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={access_token}'
     try:
         response = requests.post(url, json=body)
@@ -115,7 +147,59 @@ def send_wechat_message(access_token, title, suggestion, price_info, remark):
         logging.error(f"发送消息到微信失败: {e}")
     finally:
         logging.info("send_wechat_message 函数结束")
+        
+def eth_report():
+    """主任务函数：获取价格、分析并根据条件发送报告"""
+    logging.info("eth_report 函数开始")
+    
+    access_token = get_access_token()
+    if not access_token:
+        logging.error("无法获取 access_token，任务终止")
+        return
 
+    eth_price_float = fetch_eth_price_api()
+    if eth_price_float is None:
+        # 即使失败，也要构造一个符合模板的消息
+        error_title = "运行失败"
+        error_product = "以太坊 (ETH)"
+        error_price = "N/A"
+        error_suggestion = "未能获取价格"
+        error_remark = "请检查网络或API状态。"
+        send_wechat_message(access_token, error_title, error_product, error_price, error_suggestion, error_remark)
+        return
+
+    history = load_history()
+    
+    current_time = datetime.now(timezone.utc).isoformat()
+    history.append({"timestamp": current_time, "price": eth_price_float})
+    
+    if len(history) > MAX_HISTORY_POINTS:
+        history = history[-MAX_HISTORY_POINTS:]
+
+    analysis = analyze_with_llm(history, eth_price_float)
+    
+    save_history(history)
+    
+    # --- 为适配新模板，准备数据 ---
+    formatted_price = f"${eth_price_float:,.2f}"
+    product_name = "以太坊 (ETH)" # 这是 “产品名称” 的值
+    current_price_val = formatted_price  # 这是 “当前价格” 的值
+    suggestion = analysis.get('suggestion', '分析无结果') # 这是 “分析建议” 的值
+    remark_details = analysis.get('reason', '未能获取分析详情。')
+    
+    # 构造一个总标题
+    title = f"ETH AI 分析报告：{suggestion}"
+    
+    # 检查是否触发价格预警，预警信息优先
+    if eth_price_float < 2100 or eth_price_float > 3800:
+        title = f"价格预警！ETH 现价 {formatted_price}"
+        logging.info(f"价格触发提醒条件 (< 2100 or > 3800)。")
+    
+    # 调用适配版的发送函数
+    send_wechat_message(access_token, title, product_name, current_price_val, suggestion, remark_details)
+
+    logging.info("eth_report 函数结束")
+    
 def load_history():
     """从文件加载历史价格数据"""
     if os.path.exists(HISTORY_FILE):
@@ -135,7 +219,6 @@ def save_history(history):
         logging.info(f"成功将 {len(history)} 条记录保存到 '{HISTORY_FILE}'")
     except Exception as e:
         logging.error(f"无法保存历史文件 '{HISTORY_FILE}': {e}")
-
 
 def analyze_with_llm(history, current_price):
     """
@@ -194,50 +277,6 @@ def analyze_with_llm(history, current_price):
     except Exception as e:
         logging.error(f"调用 LLM API 或解析结果失败: {e}")
         return {"suggestion": "AI分析失败", "reason": "调用模型时发生错误，请检查服务状态或API密钥。"}
-
-
-def eth_report():
-    """主任务函数：获取价格、分析并根据条件发送报告"""
-    logging.info("eth_report 函数开始")
-    
-    access_token = get_access_token()
-    if not access_token:
-        logging.error("无法获取 access_token，任务终止")
-        return
-
-    eth_price_float = fetch_eth_price_api()
-    if eth_price_float is None:
-        send_wechat_message(access_token, "运行失败", "未能获取以太坊价格", "N/A", "请检查网络或API状态。")
-        return
-
-    history = load_history()
-    
-    current_time = datetime.now(timezone.utc).isoformat()
-    history.append({"timestamp": current_time, "price": eth_price_float})
-    
-    if len(history) > MAX_HISTORY_POINTS:
-        history = history[-MAX_HISTORY_POINTS:]
-
-    # 使用新的 LLM 函数进行分析
-    analysis = analyze_with_llm(history, eth_price_float)
-    
-    save_history(history)
-    
-    # 准备并发送消息
-    formatted_price = f"${eth_price_float:,.2f}"
-    price_info = f"当前价格: {formatted_price}"
-    title = f"ETH AI 分析报告：{analysis.get('suggestion', 'N/A')}"
-    suggestion = analysis.get('suggestion', '分析无结果')
-    remark = analysis.get('reason', '未能获取分析详情。')
-    
-    # 检查是否触发价格预警，预警信息优先
-    if eth_price_float < 2100 or eth_price_float > 3800:
-        title = f"价格预警！ETH 现价 {formatted_price}"
-        logging.info(f"价格触发提醒条件 (< 2100 or > 3800)。")
-    
-    send_wechat_message(access_token, title, suggestion, price_info, remark)
-
-    logging.info("eth_report 函数结束")
 
 if __name__ == "__main__":
     logging.info("__main__ 开始")
