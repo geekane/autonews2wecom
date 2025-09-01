@@ -143,7 +143,7 @@ async def export_and_process_data(page: Page):
             await page.get_by_role("button", name="确定导出").click()
         new_page = await new_page_info.value
         print("新页面已捕获，正在等待 '下载' 按钮加载...")
-        download_button_selector = new_page.get_by_text("下载").nth(3)
+        download_button_selector = new_page.get_by_text("下载").nth(4)
         await download_button_selector.wait_for(state="visible", timeout=60000)
         print("✅ '下载' 按钮已可见。")
         print("步骤 5: 在新页面上点击 '下载' 按钮...")
