@@ -2,24 +2,25 @@ import json
 import asyncio
 import os
 import pandas as pd
-from playwright.async_api import async_playwright, Page, TimeoutError
+# 导入 'expect' 用于更可靠的等待条件
+from playwright.async_api import async_playwright, Page, TimeoutError, expect
 import lark_oapi as lark
 from lark_oapi.api.bitable.v1 import *
 
-# --- 基础配置 ---
+# --- 基础配置 (无需修改) ---
 COOKIE_FILE = '来客.json'
 BASE_URL = 'https://life.douyin.com/p/liteapp/fulfillment-fusion/refund?groupid=1768205901316096'
 EXPORT_FILE_NAME = "退款记录.xlsx"
 ERROR_SCREENSHOT_FILE = "error_screenshot.png"
 
-# --- 飞书多维表格 API 配置 ---
+# --- 飞书多维表格 API 配置 (无需修改) ---
 FEISHU_APP_ID = os.environ.get("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
 FEISHU_APP_TOKEN = "MslRbdwPca7P6qsqbqgcvpBGnRh"
 FEISHU_TABLE_ID = "tbljY9UiV7m5yk67"
 
 async def delete_all_records_from_bitable(client: lark.Client):
-    # 此函数内容无需修改，保持原样
+    # --- 此函数无需修改 ---
     print("\n--- 开始清空飞书多维表格中的所有现有记录 ---")
     all_record_ids = []
     page_token = None
@@ -67,23 +68,17 @@ async def delete_all_records_from_bitable(client: lark.Client):
     return True
 
 async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
-    """
-    将筛选后的DataFrame数据【批量写入】到指定的飞书多维表格。
-    """
+    # --- 此函数无需修改 ---
     print("\n--- 开始将新数据【批量写入】飞书多维表格 ---")
     total_rows = len(df)
     if total_rows == 0:
         print("没有需要写入的新数据。")
         return
-
     print("正在为日期时间数据附加时区信息 (Asia/Shanghai)...")
-    # 检查 '退款申请时间' 列是否已经是时区感知的
     if df['退款申请时间'].dt.tz is None:
         df['退款申请时间'] = df['退款申请时间'].dt.tz_localize('Asia/Shanghai')
     else:
-        # 如果已有其他时区，则转换为上海时区
         df['退款申请时间'] = df['退款申请时间'].dt.tz_convert('Asia/Shanghai')
-
     print("正在准备所有待上传的记录...")
     records_to_create = []
     for index, row in df.iterrows():
@@ -92,14 +87,12 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
             if pd.isna(value):
                 fields_data[col_name] = ""
             elif col_name == '退款申请时间':
-                # 现在 value 是一个带时区的datetime对象，调用 .timestamp() 会生成正确的UTC时间戳
                 timestamp_ms = int(value.timestamp() * 1000)
                 fields_data[col_name] = timestamp_ms
             else:
                 fields_data[col_name] = str(value)
         record = AppTableRecord.builder().fields(fields_data).build()
         records_to_create.append(record)
-    
     batch_size = 500
     success_count = 0
     for i in range(0, total_rows, batch_size):
@@ -120,133 +113,143 @@ async def write_df_to_feishu_bitable(client: lark.Client, df: pd.DataFrame):
     print(f"--- 飞书多维表格批量写入完成 ---")
     print(f"总计 {total_rows} 条记录，成功写入 {success_count} 条。")
 
+# ====================================================================================
+# ▼▼▼ 核心优化部分 ▼▼▼
+# ====================================================================================
 async def export_and_process_data(page: Page):
     """
-    执行完整的“导出-处理-上传”流程。
+    执行完整的“导出-处理-上传”流程，优化了等待逻辑和元素定位器。
     """
     print("\n--- 开始执行数据导出、处理与上传流程 ---")
+    new_page = None  # 提前声明变量以备在异常处理中使用
     try:
-        # ... (前面的步骤保持不变) ...
-        print("步骤 1: 点击导出菜单的触发图标...")
-        await page.locator(".byted-content-inner-wrapper > .byted-icon > svg > g > path").click(timeout=15000)
-        await page.wait_for_timeout(1000)
-        print("步骤 2: 点击 '待处理' 选项卡...")
+        # 步骤 1: 点击 '待处理' 选项卡并等待列表加载
+        print("步骤 1: 点击 '待处理' 选项卡...")
+        # 使用更稳定的定位器
         await page.locator('.byted-radio-tag:has-text("待处理")').click()
-        await page.wait_for_timeout(3000)
-        print("'待处理' 列表加载完成。")
-        await page.wait_for_timeout(5000)
-        print("步骤 3: 点击 '导出数据' 按钮...")
-        await page.get_by_role("button", name="导出数据").click()
-        await page.wait_for_timeout(1000)
-        print("步骤 4: 点击 '确定导出'，并捕获新页面...")
-        async with page.context.expect_page() as new_page_info:
-            await page.get_by_role("button", name="确定导出").click()
+        # 等待关键按钮出现，确认页面已加载
+        export_data_button = page.get_by_role("button", name="导出数据")
+        await export_data_button.wait_for(state="visible", timeout=15000)
+        print("✅ '待处理' 列表加载完成。")
+
+        # 步骤 2: 启动导出流程
+        print("步骤 2: 点击 '导出数据' 按钮...")
+        await export_data_button.click()
+
+        # 步骤 3: 确认导出并捕获新打开的“导出记录”页面
+        print("步骤 3: 点击 '确定导出'，并等待新页面打开...")
+        confirm_export_button = page.get_by_role("button", name="确定导出")
+        async with page.context.expect_page(timeout=10000) as new_page_info:
+            await confirm_export_button.click()
         new_page = await new_page_info.value
-        print("新页面已捕获，正在等待 '下载' 按钮加载...")
-        download_button_selector = new_page.get_by_text("下载").nth(3)
-        await download_button_selector.wait_for(state="visible", timeout=60000)
-        print("✅ '下载' 按钮已可见。")
-        print("步骤 5: 在新页面上点击 '下载' 按钮...")
-        async with new_page.expect_download() as download_info:
-            await download_button_selector.click()
+        await new_page.wait_for_load_state("domcontentloaded")
+        print("✅ 新页面（导出记录）已捕获。")
+
+        # 步骤 4: 【关键优化】等待后台生成文件，而不是直接下载
+        print("步骤 4: 等待后台生成导出文件（最长等待3分钟）...")
+        # 定位到导出记录列表的第一行（即最新任务）
+        first_row = new_page.locator("tbody > tr").first
+        # 定位该行的状态列。注意：'td:nth-child(4)'可能需要根据实际页面结构调整
+        status_cell = first_row.locator("td:nth-child(4)")
+        
+        # 使用 expect 持续检查状态，直到文本包含“导出成功”，超时时间设为180秒
+        await expect(status_cell).to_contain_text("导出成功", timeout=180000)
+        print("✅ 文件已成功生成！")
+
+        # 步骤 5: 文件生成后，再进行下载
+        print("步骤 5: 点击 '下载' 按钮...")
+        download_button = first_row.get_by_role("button", name="下载")
+        async with new_page.expect_download(timeout=30000) as download_info:
+            await download_button.click()
         download = await download_info.value
+        
         if os.path.exists(EXPORT_FILE_NAME):
             os.remove(EXPORT_FILE_NAME)
         await download.save_as(EXPORT_FILE_NAME)
         print(f"✅ 文件已成功下载: {EXPORT_FILE_NAME}")
 
-        # =========================================================
-        # 已新增: 遍历并删除已导出的记录
-        # =========================================================
-        print("\n步骤 5.1: 开始清理已导出的记录...")
-        # 注意：此时我们操作的是 new_page，即“导出记录”页面
+        # 步骤 6: 【优化】清理所有已导出的记录
+        print("\n步骤 6: 开始清理所有导出记录...")
+        while True:
+            # 使用更健壮的定位器
+            delete_buttons = new_page.get_by_role("button", name="删除")
+            count = await delete_buttons.count()
+            if count == 0:
+                print("✅ 没有需要删除的记录，清理完成。")
+                break
+            
+            print(f"找到 {count} 条记录，正在删除第一条...")
+            try:
+                await delete_buttons.first.click()
+                confirm_delete_button = new_page.get_by_role("button", name="确认删除")
+                await confirm_delete_button.wait_for(state="visible")
+                await confirm_delete_button.click()
+                
+                # 【可靠等待】等待按钮数量减少，确认删除成功
+                await expect(delete_buttons).to_have_count(count - 1, timeout=10000)
+                print(f"记录已删除。剩余 {count - 1} 条。")
+            except Exception as delete_error:
+                print(f"❌ 删除记录时出错: {delete_error}。将刷新页面后重试...")
+                await new_page.reload()
+                await new_page.wait_for_load_state("domcontentloaded")
 
-        # 找到所有“删除”按钮
-        delete_buttons = new_page.locator("span.bt--q2Xcs:has-text('删除')")
-        count = await delete_buttons.count()
-
-        if count == 0:
-            print("没有找到需要删除的记录。")
-        else:
-            print(f"找到 {count} 条已导出记录，准备逐一删除...")
-            # 从上到下删除，所以我们总是点击第一个“删除”按钮
-            for i in range(count):
-                print(f"正在删除第 {i + 1}/{count} 条记录...")
-                try:
-                    # 定位第一个可见的删除按钮并点击
-                    first_delete_button = delete_buttons.first
-                    await first_delete_button.click()
-                    await new_page.wait_for_timeout(500) # 等待确认弹窗出现
-
-                    # 点击“确认删除”按钮
-                    await new_page.get_by_role("button", name="确认删除").click()
-                    
-                    # 等待一下，让列表刷新。可以等待某个元素消失，或简单等待固定时间
-                    # 这里使用固定等待，因为它更简单
-                    await new_page.wait_for_timeout(2000) 
-                    print(f"第 {i + 1} 条记录已删除。")
-                except Exception as delete_error:
-                    print(f"❌ 删除第 {i + 1} 条记录时出错: {delete_error}")
-                    # 即使某条删除失败，也继续尝试下一条
-                    continue
-        
-        print("✅ 已导出记录清理完毕。")
-        # =========================================================
-        # 新增逻辑结束
-        # =========================================================
-
+        print("✅ 所有导出记录清理完毕。")
         await new_page.close()
         print("导出记录页面已关闭。")
 
-
-        print("\n步骤 6: 读取并筛选Excel数据...")
-        # ... (后续的代码保持不变) ...
+        # 步骤 7: 读取Excel并上传到飞书（此部分逻辑不变）
+        print("\n步骤 7: 读取并筛选Excel数据...")
         if not os.path.exists(EXPORT_FILE_NAME):
             print(f"❌ 错误：找不到下载的文件 {EXPORT_FILE_NAME}")
             return False
+        
         df = pd.read_excel(EXPORT_FILE_NAME)
         if not df.empty:
-            # 步骤 7: 初始化飞书客户端
             if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
                 print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
                 return False
             feishu_client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).build()
-            # 步骤 8: 清空表格
-            delete_ok = await delete_all_records_from_bitable(feishu_client)
-            if not delete_ok:
+            
+            if not await delete_all_records_from_bitable(feishu_client):
                 print("❌ 清空表格步骤失败，终止后续写入操作。")
                 return False
-            # 步骤 9: 写入新数据
+
             required_columns = ['核销门店', '商品名称', '退款申请时间', '退款申请原因', '订单实收(元)', '退款金额(元)']
-            for col in required_columns:
-                if col not in df.columns:
-                    print(f"❌ 错误: 下载的Excel文件中缺少必需的列: '{col}'")
-                    return False
+            if not all(col in df.columns for col in required_columns):
+                print(f"❌ 错误: 下载的Excel文件中缺少必需的列。")
+                return False
+            
             filtered_df = df[required_columns].copy()
             filtered_df['退款申请时间'] = pd.to_datetime(filtered_df['退款申请时间'])
             print("✅ 数据筛选完成。预览筛选后的数据 (前5行):")
             print(filtered_df.head().to_string())
             await write_df_to_feishu_bitable(feishu_client, filtered_df)
         else:
-            print("✅ 下载的Excel文件为空，无需写入新数据。")
-            # 即使Excel为空，也执行清空操作
-            if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-                print("❌ 错误：飞书的 App ID 或 App Secret 环境变量未设置！")
-                return False
+            print("✅ 下载的Excel文件为空，清空线上表格后结束。")
+            if not FEISHU_APP_ID or not FEISHU_APP_SECRET: return False
             feishu_client = lark.Client.builder().app_id(FEISHU_APP_ID).app_secret(FEISHU_APP_SECRET).build()
             await delete_all_records_from_bitable(feishu_client)
             
         print("--- 数据导出、处理与上传流程执行成功 ---\n")
         return True
+
     except Exception as e:
         print(f"❌ 在执行导出、处理与上传流程时发生错误: {e}")
-        # 如果新页面已经打开，也尝试截图
-        if 'new_page' in locals() and not new_page.is_closed():
-            await new_page.screenshot(path=f"error_new_page_{ERROR_SCREENSHOT_FILE}")
+        # 尝试对两个可能的页面进行截图
+        if new_page and not new_page.is_closed():
+            await new_page.screenshot(path=f"error_new_page.png")
+            print("✅ 已保存新页面的错误截图。")
+        if page and not page.is_closed():
+             await page.screenshot(path=ERROR_SCREENSHOT_FILE)
+             print(f"✅ 已保存主页面的错误截图。")
         return False
+# ====================================================================================
+# ▲▲▲ 核心优化部分 ▲▲▲
+# ====================================================================================
+
 
 async def main():
-    # 此函数内容无需修改
+    # --- 此函数无需修改 ---
     async with async_playwright() as p:
         print(f"正在从 {COOKIE_FILE} 文件中读取 cookie...")
         try:
@@ -265,21 +268,19 @@ async def main():
         try:
             print("正在添加 Cookie 到浏览器上下文...")
             await context.add_cookies(cookies)
-            print("正在导航至基础页面...")
+            print("正在导航至目标页面...")
             try:
                 await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45000)
             except TimeoutError:
                 print("⚠️ 页面加载在45秒内未完成，但脚本将继续尝试执行...")
-            print("基础页面导航完成或已超时。")
-            # 假设 close_potential_popups 函数已定义
+            print("页面导航完成或已超时。")
             await page.wait_for_timeout(3000)
+            
             successful = await export_and_process_data(page)
             if successful:
                 print("✅✅✅ 核心任务全部成功完成！")
             else:
-                print("流程内部返回失败，正在截取当前页面...")
-                await page.screenshot(path=ERROR_SCREENSHOT_FILE, full_page=True)
-                print(f"✅ 截图已保存为 {ERROR_SCREENSHOT_FILE}")
+                print("流程执行失败，请检查上面打印的错误日志和截图。")
                 exit(1)
         except Exception as e:
             print(f"Playwright 主流程操作时出错: {e}")
@@ -291,5 +292,6 @@ async def main():
             print("操作完成，关闭浏览器...")
             await context.close()
             await browser.close()
+
 if __name__ == '__main__':
     asyncio.run(main())
