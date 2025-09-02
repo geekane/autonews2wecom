@@ -29,8 +29,6 @@ jobs:
       uses: actions/cache@v3
       with:
         path: eth_price_history.json
-        # --- 核心修改在这里 ---
-        # 使用一个固定的 key，不再依赖文件哈希值
         key: ${{ runner.os }}-eth-history-cache-v1
         # restore-keys 也可以指向同一个 key，确保能找到
         restore-keys: |
