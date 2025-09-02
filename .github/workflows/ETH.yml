@@ -3,7 +3,7 @@ name: Ethereum Price Reporter
 on:
   schedule:
     # 每小时运行一次
-    - cron: '*/5 * * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -12,7 +12,10 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      # 使用 persist-credentials: false 很重要，因为下一步要用 token 提交
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false 
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -22,23 +25,57 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests openai # <--- 在这里添加 openai
+        pip install requests openai
 
-    - name: Cache ETH price history
+    # Cache 步骤现在变成一个“后备方案”
+    # 如果仓库里没有这个文件（比如第一次运行），它会尝试从缓存恢复
+    - name: Restore history from cache if it exists
       id: cache-history
       uses: actions/cache@v3
       with:
         path: eth_price_history.json
         key: ${{ runner.os }}-eth-history-cache-v1
-        # restore-keys 也可以指向同一个 key，确保能找到
-        restore-keys: |
-          ${{ runner.os }}-eth-history-cache-v1
-          
-    - name: Run the script
+
+    # --- 调试步骤 ---
+    # 在运行脚本前，打印文件内容，确认是否加载了旧数据
+    - name: Show history file content before script runs
+      run: |
+        echo "--- Content of eth_price_history.json BEFORE script ---"
+        if [ -f eth_price_history.json ]; then
+          cat eth_price_history.json
+        else
+          echo "eth_price_history.json does not exist yet."
+        fi
+        echo "----------------------------------------------------"
+
+    - name: Run the script to fetch price and update history
       env:
         APPID: ${{ secrets.APPID }}
         APPSECRET: ${{ secrets.APPSECRET }}
         OPENID: ${{ secrets.OPENID }}
         ETH_TEMPLATE_ID: ${{ secrets.ETH_TEMPLATE_ID }}
-        LLM_API_KEY: ${{ secrets.LLM_API_KEY }} # <--- 在这里添加新的 secret
+        LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       run: python eth_api.py
+      
+    # --- 调试步骤 ---
+    # 在运行脚本后，再次打印文件内容，确认数据已追加
+    - name: Show history file content after script runs
+      run: |
+        echo "--- Content of eth_price_history.json AFTER script ---"
+        cat eth_price_history.json
+        echo "---------------------------------------------------"
+
+    # --- 核心解决方案 ---
+    # 将更新后的 eth_price_history.json 文件提交回仓库
+    - name: Commit and push updated price history
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        # 提交消息
+        commit_message: "chore: Update ETH price history"
+        # 指定要提交的文件
+        file_pattern: eth_price_history.json
+        # 提交的用户和邮箱
+        commit_user_name: "GitHub Actions Bot"
+        commit_user_email: "github-actions[bot]@users.noreply.github.com"
+        # 如果没有变化，不创建空的提交
+        skip_empty_commit: true
