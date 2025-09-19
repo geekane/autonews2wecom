@@ -60,17 +60,17 @@ def main():
     }
 
     # ==============================================================================
-    # 2. 抓取、保存、分析 (此部分逻辑与之前完全相同)
+    # 2. 抓取、保存、分析 
     # ==============================================================================
     
     all_items = []
-    total_pages = 78
+    total_pages = 16
     
     for page_num in range(1, total_pages + 1):
         logging.info(f"--- 正在请求第 {page_num} / {total_pages} 页 ---")
         payload = {
           "conds": { "operating_levels": [], "city_map": {}, "order_by": 0, "poi_relation": 0 },
-          "page_info": { "page": page_num, "page_size": 10, "total_page": total_pages, "total_count": 776 }
+          "page_info": { "page": page_num, "page_size": 50, "total_page": total_pages, "total_count": 776 }
         }
         
         try:
