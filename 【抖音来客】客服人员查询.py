@@ -44,7 +44,7 @@ async def main():
     cookie_file = '来客.json'
     target_url = "https://life.douyin.com/cs/web/distributary/group?accountId=1768205901316096&conGroupId=536920&groupId=1768205901316096&lifeAccountId=7241078611527075855"
     wechat_webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=0e364220-efc0-4e7b-b505-129ea3371053"
-    KNOWN_AGENTS = ["杨蕊嘉行政", "宋华新", "吴东桧", "康涛"]
+    KNOWN_AGENTS = ["杨蕊嘉行政", "宋华新", "吴东桧"]
 
     # --- 2. 检查 Cookie 文件 ---
     if not os.path.exists(cookie_file):
