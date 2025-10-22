@@ -729,7 +729,7 @@ class CliRunner:
             logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条待处理记录。")
 
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
+                browser = await p.chromium.launch(headless=False)
                 
                 if not os.path.exists(COOKIE_FILE):
                     raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。")
@@ -748,13 +748,13 @@ class CliRunner:
                 # 添加点击 “我知道了” 的代码
                 try:
                     popup_button = page.locator(".venus-poptip.venus-poptip_show").get_by_text("我知道了", exact=True)
-                    await page.wait_for_timeout(5000) # 等待弹窗关闭动画
+                    await popup_button.click(timeout=10000)
                 except Exception as e:
                     logging.info("  - 未检测到'我知道了'弹窗，继续执行。")
                 
                 logging.info("给予页面一些稳定时间...")
                 await page.wait_for_timeout(3000)
-                
+                               
                 total_tasks = len(tasks_to_process)
                 for i, task in enumerate(tasks_to_process):
                     product_id, record_id = task["id"], task["record_id"]
@@ -800,7 +800,7 @@ class CliRunner:
             failed_sets = 0
 
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
+                browser = await p.chromium.launch(headless=False)
                 
                 if not os.path.exists(COOKIE_FILE):
                     raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。")
@@ -809,6 +809,12 @@ class CliRunner:
                 
                 base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId=7241078611527075855&orderId=7521772903543900206&queryScene=0&skuOrderId=7521772903543916590&tabName=ChargeSetting"
                 await page.goto(base_url, timeout=90000, wait_until="domcontentloaded")
+
+                try:
+                    popup_button = page.locator(".venus-poptip.venus-poptip_show").get_by_text("我知道了", exact=True)
+                    await popup_button.click(timeout=10000)
+                except Exception as e:
+                    logging.info("  - 未检测到'我知道了'弹窗，继续执行。")
                 
                 for i, task in enumerate(tasks_to_process):
                     pid = task["id"]
