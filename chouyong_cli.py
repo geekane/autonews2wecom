@@ -742,13 +742,13 @@ class CliRunner:
                 base_url = f"https://www.life-partner.cn/vmok/order-detail?from_page=order_management&merchantId=7241078611527075855&orderId=7521772903543900206&queryScene=0&skuOrderId=7521772903543916590&tabName=ChargeSetting"
                 await page.goto(base_url, timeout=120000, wait_until="domcontentloaded")
                 
-                logging.info("页面导航完成，给予5秒稳定时间...")
-                await page.wait_for_timeout(5000)
+                logging.info("页面导航完成，给予10秒稳定时间...")
+                await page.wait_for_timeout(10000)
 
                 # 添加点击 “我知道了” 的代码
                 try:
                     popup_button = page.locator(".venus-poptip.venus-poptip_show").get_by_text("我知道了", exact=True)
-                    await page.wait_for_timeout(1000) # 等待弹窗关闭动画
+                    await page.wait_for_timeout(5000) # 等待弹窗关闭动画
                 except Exception as e:
                     logging.info("  - 未检测到'我知道了'弹窗，继续执行。")
                 
