@@ -747,9 +747,7 @@ class CliRunner:
 
                 # 添加点击 “我知道了” 的代码
                 try:
-                    # 使用 locator 查找弹窗内的 "我知道了" 按钮并点击
-                    # 使用较短的超时时间，因为弹窗不一定会出现
-                    popup_button = page.locator("[id^='venus_poptip_']").get_by_role("button", name="我知道了")
+                    popup_button = page.locator(".venus-poptip.venus-poptip_show").get_by_text("我知道了", exact=True)
                     await page.wait_for_timeout(1000) # 等待弹窗关闭动画
                 except Exception as e:
                     logging.info("  - 未检测到'我知道了'弹窗，继续执行。")
