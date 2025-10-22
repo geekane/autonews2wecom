@@ -744,6 +744,21 @@ class CliRunner:
                 
                 logging.info("页面导航完成，给予5秒稳定时间...")
                 await page.wait_for_timeout(5000)
+
+                # 添加点击 “我知道了” 的代码
+                try:
+                    # 使用 locator 查找弹窗内的 "我知道了" 按钮并点击
+                    # 使用较短的超时时间，因为弹窗不一定会出现
+                    await page.locator("#venus_poptip_URGJ").get_by_text("我知道了").click(timeout=10000)
+                    logging.info("  ✔ 成功点击了'我知道了'弹窗。")
+                    await page.wait_for_timeout(1000) # 等待弹窗关闭动画
+                except Exception as e:
+                    # 如果找不到按钮（超时），说明弹窗可能不存在，这是正常情况
+                    logging.info("  - 未检测到'我知道了'弹窗，继续执行。")
+                # ==========================================================
+                
+                logging.info("给予页面一些稳定时间...")
+                await page.wait_for_timeout(3000)
                 
                 total_tasks = len(tasks_to_process)
                 for i, task in enumerate(tasks_to_process):
