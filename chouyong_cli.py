@@ -729,7 +729,7 @@ class CliRunner:
             logging.info(f"共从飞书获取到 {len(tasks_to_process)} 条待处理记录。")
 
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=False)
+                browser = await p.chromium.launch(headless=True)
                 
                 if not os.path.exists(COOKIE_FILE):
                     raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。")
@@ -800,7 +800,7 @@ class CliRunner:
             failed_sets = 0
 
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=False)
+                browser = await p.chromium.launch(headless=True)
                 
                 if not os.path.exists(COOKIE_FILE):
                     raise FileNotFoundError(f"Cookie文件 '{COOKIE_FILE}' 未找到。")
