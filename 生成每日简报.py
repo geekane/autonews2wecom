@@ -14,8 +14,8 @@ TABLE_ID = "tbliEUHB9iSxZuiY" # 这个通常是固定的，可以硬编码
 
 # ModelScope LLM API 配置
 MODELSCOPE_API_KEY = os.environ.get("MODELSCOPE_API_KEY")
-MODELSCOPE_MODEL_ID = "qwen-plus" # 推荐使用增强版以获得更好的长文本总结能力
-MODELSCOPE_BASE_URL = "https://api.lingyiwanwu.com/v1"
+MODELSCOPE_MODEL_ID = "Qwen/Qwen3-Next-80B-A3B-Thinking" # 推荐使用增强版以获得更好的长文本总结能力
+MODELSCOPE_BASE_URL = "https://api-inference.modelscope.cn/v1"
 
 # Cloudflare Worker 配置
 CF_WORKER_URL = os.environ.get("CF_WORKER_URL")
