@@ -4,21 +4,15 @@ name: Daily Douyin Scraper
 # 工作流的触发条件
 on:
   # 1. 定时触发：使用 cron 语法，每天 00:00 UTC 时间执行
-  #    (UTC 0点 对应 北京时间 早上8点)
   schedule:
     - cron: '0 0 * * *'
 
-  # 2. 手动触发：允许你在 GitHub 仓库的 Actions 页面手动点击 "Run workflow" 来运行
   workflow_dispatch:
 
 # 定义一个或多个作业（job）
 jobs:
-  # 作业的唯一ID
   scrape-and-upload:
-    # 作业的名称，会显示在 GitHub Actions 的界面上
     name: Scrape Douyin and Upload to Feishu
-
-    # 指定运行此作业的虚拟机环境，'ubuntu-latest' 是一个稳定且常用的选择
     runs-on: ubuntu-latest
 
     # 作业的执行步骤
@@ -31,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10' # 你可以根据需要指定 Python 版本
+          python-version: '3.10'
 
       # 第三步：安装系统和Python依赖
       - name: Install dependencies
@@ -39,11 +33,10 @@ jobs:
           # 更新包列表并安装 ffmpeg 这个系统工具
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          # 升级 pip 并根据 requirements.txt 安装 Python 库
+          # 升级 pip
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install requests pandas ffmpeg-python python-dotenv
 
       # 第四步：执行你的 Python 脚本
       - name: Run Douyin Scraper Script
         run: python 1109抖音.py --mode batch
-        # 你的脚本默认就是 batch 模式，这里明确指定一下更清晰
