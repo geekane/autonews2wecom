@@ -2,7 +2,6 @@ name: Generate Daily Industry Report
 
 on:
   schedule:
-    # 每天 00:00 UTC 时间运行，约等于北京时间上午8点
     - cron: '0 0 * * *'
   workflow_dispatch: # 允许手动触发
 
@@ -24,7 +23,7 @@ jobs:
           pip install requests openai
 
       - name: Run script to generate and save report
-        run: python your_script_name.py
+        run: python 生成每日简报.py
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
