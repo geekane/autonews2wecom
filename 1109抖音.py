@@ -36,8 +36,8 @@ if hasattr(sys.stdout, 'buffer'):
 # --- 核心配置 ---
 # ==============================================================================
 SILICONFLOW_API_KEY = "sk-nexfkxivirurtdvbpzkjgjcyplorwkssfitcvnppeaclunbe"
-FEISHU_APP_ID = "cli_a6672cae343ad00e"
-FEISHU_APP_SECRET = "0J4SpfBMeIxJEOXDJMNbofMipRgwkMpV"
+FEISHU_APP_ID = "cli_a8ad5b52783b901c"
+FEISHU_APP_SECRET = "DK8advnsYeChNF0yltKvKeqiQiYiAnyC"
 FEISHU_APP_TOKEN = "BJ2gbK1onahpjZsglTgcxo7Onif"
 FEISHU_TABLE_ID = "tbliEUHB9iSxZuiY"
 
