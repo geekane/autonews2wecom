@@ -1,41 +1,31 @@
 name: 每日网吧博主抖音视频信息爬虫
 
-# 工作流的触发条件
 on:
-  # 1. 定时触发：使用 cron 语法，每天 00:00 UTC 时间执行
   schedule:
     - cron: '0 0 * * *'
 
   workflow_dispatch:
 
-# 定义一个或多个作业（job）
 jobs:
   scrape-and-upload:
     name: Scrape Douyin and Upload to Feishu
     runs-on: ubuntu-latest
 
-    # 作业的执行步骤
     steps:
-      # 第一步：检出（下载）你的仓库代码到虚拟机
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 第二步：设置 Python 环境
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
-      # 第三步：安装系统和Python依赖
+          
       - name: Install dependencies
         run: |
-          # 更新包列表并安装 ffmpeg 这个系统工具
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          # 升级 pip
           python -m pip install --upgrade pip
           pip install requests pandas ffmpeg-python python-dotenv
 
-      # 第四步：执行你的 Python 脚本
       - name: Run Douyin Scraper Script
         run: python 1109抖音.py --mode batch
