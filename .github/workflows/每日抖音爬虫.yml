@@ -1,5 +1,4 @@
-# GitHub Actions 工作流的名称
-name: Daily Douyin Scraper
+name: 每日网吧博主抖音视频信息爬虫
 
 # 工作流的触发条件
 on:
