@@ -347,7 +347,7 @@ class DouyinCrawler:
 # --- 模块五：总指挥 ---
 async def process_homepage(homepage_url, log_list, feishu_api, table_id, crawler):
     log_message(log_list, f"➡️ 阶段1: 开始处理主页: {homepage_url}")
-    result = crawler.get_user_videos(homepage_url, max_videos=2)
+    result = crawler.get_user_videos(homepage_url, max_videos=4)
     
     if "error" in result:
         log_message(log_list, f"❌ 扫描失败: {result['error']}")
