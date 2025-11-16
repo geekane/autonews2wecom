@@ -153,6 +153,55 @@ class FeishuAPI:
         else:
             raise Exception(f"获取飞书数据表ID失败: {data.get('msg')}")
 
+    # 【新增函数】获取指定表格中所有“视频链接”
+    def get_all_video_links(self, app_token: str, table_id: str) -> set:
+        """
+        从飞书表格中获取所有“视频链接”列的值，并返回一个集合以便快速去重。
+        """
+        all_links = set()
+        token = self._get_tenant_access_token()
+        url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records"
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        page_token = ""
+        while True:
+            params = {"page_size": 500, "field_names": '["视频链接"]'} # 只请求需要的列
+            if page_token:
+                params["page_token"] = page_token
+            
+            try:
+                response = requests.get(url, headers=headers, params=params, timeout=60)
+                response.raise_for_status()
+                result = response.json()
+
+                if result.get("code") != 0:
+                    print(f"获取飞书记录时出错: {result.get('msg')}")
+                    break
+                
+                data = result.get("data", {})
+                items = data.get("items", [])
+                for item in items:
+                    fields = item.get("fields", {})
+                    video_link_field = fields.get("视频链接")
+                    # 飞书链接字段的标准格式是 [{"link": "URL"}]
+                    if isinstance(video_link_field, list) and len(video_link_field) > 0:
+                        link_obj = video_link_field[0]
+                        if isinstance(link_obj, dict) and "link" in link_obj:
+                            all_links.add(link_obj["link"])
+                    # 也兼容可能是纯文本URL的情况
+                    elif isinstance(video_link_field, str) and video_link_field.startswith("http"):
+                        all_links.add(video_link_field)
+
+                if data.get("has_more"):
+                    page_token = data.get("page_token")
+                else:
+                    break
+            except Exception as e:
+                print(f"请求飞书记录时发生异常: {e}")
+                break # 发生异常时中断，避免无限循环
+        
+        return all_links
+
     def add_records_batch(self, app_token, table_id, records):
         token = self._get_tenant_access_token()
         url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records/batch_create"
@@ -353,19 +402,41 @@ async def process_homepage(homepage_url, log_list, feishu_api, table_id, crawler
         log_message(log_list, f"❌ 扫描失败: {result['error']}")
         return
         
-    total_videos = result.get("total_count", 0)
     videos = result.get("videos", [])
     author_name = result.get("user_info", {}).get("nickname", "未知作者")
     
-    log_message(log_list, f"✅ 扫描结束！作者: {author_name}, 共找到 {total_videos} 个视频。")
-    if total_videos == 0: return
+    log_message(log_list, f"✅ 扫描结束！作者: {author_name}, 共找到 {len(videos)} 个视频。")
+    if not videos: return
+
+    # 【新增步骤】: 从飞书获取已存在的视频链接进行去重
+    log_message(log_list, "➡️ 准备工作: 从飞书获取已存在的视频链接以进行去重...")
+    try:
+        existing_video_links = feishu_api.get_all_video_links(FEISHU_APP_TOKEN, table_id)
+        log_message(log_list, f"✅ 已获取 {len(existing_video_links)} 个现有链接。")
+    except Exception as e:
+        log_message(log_list, f"⚠️ 警告: 无法从飞书获取现有链接，将继续处理所有视频。错误: {e}")
+        existing_video_links = set() # 如果获取失败，则默认为空集合，不影响后续流程
+
+    # 【修改步骤】: 筛选出新的、未被记录的视频
+    original_video_count = len(videos)
+    videos_to_process = [
+        v for v in videos
+        if v.get('share_url') not in existing_video_links
+    ]
+    new_video_count = len(videos_to_process)
+    log_message(log_list, f"🔍 筛选完成: {original_video_count} 个视频中，有 {new_video_count} 个是新的，需要处理。")
+    
+    if not videos_to_process:
+        log_message(log_list, "✅ 无新视频需要处理，任务完成。")
+        return
         
-    log_message(log_list, "➡️ 阶段2: 开始逐一处理视频...")
+    log_message(log_list, "➡️ 阶段2: 开始逐一处理新视频...")
     all_results_for_feishu = []
     downloaded_sizes = set()
     
-    for i, video_info in enumerate(videos):
-        log_message(log_list, f"--- ({i+1}/{total_videos}) 开始处理: {video_info['title']} ---")
+    # 【修改步骤】: 循环处理筛选后的视频列表
+    for i, video_info in enumerate(videos_to_process):
+        log_message(log_list, f"--- ({i+1}/{new_video_count}) 开始处理: {video_info['title']} ---")
         status, video_path = download_video(video_info['video_url'], video_info['title'], downloaded_sizes)
         if "Error" in status or status == "Duplicate_Size":
             log_message(log_list, f"  ⚠️  跳过下载: {status}")
@@ -397,13 +468,13 @@ async def process_homepage(homepage_url, log_list, feishu_api, table_id, crawler
                 "视频文案": transcription, "发布日期": video_info['create_time'] * 1000
             }
         })
-        log_message(log_list, f"--- ({i+1}/{total_videos}) 处理完成 ---")
+        log_message(log_list, f"--- ({i+1}/{new_video_count}) 处理完成 ---")
     
     if all_results_for_feishu:
         log_message(log_list, "➡️ 阶段3: 开始批量写入飞书...")
         try:
             feishu_api.add_records_batch(FEISHU_APP_TOKEN, table_id, all_results_for_feishu)
-            log_message(log_list, f"✅ 成功批量写入 {len(all_results_for_feishu)} 条记录到飞书！")
+            log_message(log_list, f"✅ 成功批量写入 {len(all_results_for_feishu)} 条新记录到飞书！")
         except Exception as e:
             log_message(log_list, f"❌ 批量写入飞书失败: {e}")
 
