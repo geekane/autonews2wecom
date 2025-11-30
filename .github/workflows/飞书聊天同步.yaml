@@ -1,4 +1,4 @@
-name: Feishu Chat Monitor
+name: 飞书聊天同步
 
 on:
   schedule:
@@ -24,9 +24,8 @@ jobs:
           playwright install --with-deps chromium
 
       - name: Run the feishu monitor script
-        run: python action_script.py
+        run: python 飞书聊天.py
         env:
-          # 【关键修改】只保留需要的 Secret
           MODELSCOPE_API_KEY: ${{ secrets.MODELSCOPE_API_KEY }}
 
       - name: Commit and push if changed
