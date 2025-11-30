@@ -1,4 +1,4 @@
-name: 飞书聊天同步
+name: 飞书聊天
 
 on:
   schedule:
@@ -27,6 +27,18 @@ jobs:
         run: python 飞书聊天.py
         env:
           MODELSCOPE_API_KEY: ${{ secrets.MODELSCOPE_API_KEY }}
+
+      # 【关键新增】无论成功或失败，都上传截图文件
+      - name: Upload screenshot artifact
+        # 使用 if: always() 来确保此步骤总是运行
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feishu-screenshot
+          # 上传所有生成的 .png 文件
+          path: |
+            *.png
+          retention-days: 5 # 保留5天
 
       - name: Commit and push if changed
         run: |
