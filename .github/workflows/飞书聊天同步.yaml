@@ -1,12 +1,17 @@
-name: 飞书聊天
+name: 飞书聊天同步
 
 on:
+  # 触发器1: 每小时定时运行 (保持不变)
   schedule:
     - cron: '0 * * * *'
+
+  # 触发器2: 手动触发 (保持不变)
   workflow_dispatch:
+
+  # 【关键新增】触发器3: 当有代码推送到主分支时自动执行
   push:
     branches:
-      - main
+      - main  # 或者 master，取决于你仓库的主分支名称
 
 jobs:
   run-monitor:
@@ -31,17 +36,14 @@ jobs:
         env:
           MODELSCOPE_API_KEY: ${{ secrets.MODELSCOPE_API_KEY }}
 
-      # 【关键新增】无论成功或失败，都上传截图文件
       - name: Upload screenshot artifact
-        # 使用 if: always() 来确保此步骤总是运行
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: feishu-screenshot
-          # 上传所有生成的 .png 文件
+          name: feishu-sync-artifacts
           path: |
             *.png
-          retention-days: 5 # 保留5天
+          retention-days: 5
 
       - name: Commit and push if changed
         run: |
@@ -51,6 +53,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else
+            # 注意这里的 commit message，它是防止无限循环的关键
             git commit -m "Update chat log [skip ci]"
             git push
           fi
