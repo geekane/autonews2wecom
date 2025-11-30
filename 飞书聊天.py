@@ -15,6 +15,8 @@ MODEL_ID = 'Qwen/Qwen3-VL-30B-A3B-Instruct'
 CSV_LOG_FILE = 'chat_log.csv'
 # 截图文件名
 SCREENSHOT_FILE = 'feishu_screenshot.png'
+# Cookie文件名，脚本会直接读取此文件
+COOKIE_FILE = '飞书.json'
 # 北京时区
 BEIJING_TZ = pytz.timezone('Asia/Shanghai')
 
@@ -94,23 +96,15 @@ def capture_feishu_chat():
     """
     登录飞书，点击群聊，并截取整个页面。
     """
-    # 从环境变量中获取Base64编码的Cookie
-    feishu_cookie_b64 = os.getenv('FEISHU_COOKIE_B64')
-    if not feishu_cookie_b64:
-        print("错误: 缺少环境变量 FEISHU_COOKIE_B64。")
-        return False
-        
-    try:
-        # 解码并保存为临时文件
-        cookie_json = base64.b64decode(feishu_cookie_b64).decode('utf-8')
-        storage_state = json.loads(cookie_json)
-    except Exception as e:
-        print(f"解析Cookie JSON失败: {e}")
+    # 直接检查并使用本地的 '飞书.json' 文件
+    if not os.path.exists(COOKIE_FILE):
+        print(f"错误: 找不到 Cookie 文件 '{COOKIE_FILE}'。请确保该文件已添加到仓库中。")
         return False
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True) # 在Action中必须用 headless
-        context = browser.new_context(storage_state=storage_state)
+        # 直接从文件路径加载 storage_state
+        context = browser.new_context(storage_state=COOKIE_FILE)
         page = context.new_page()
 
         print("正在跳转到飞书...")
@@ -145,6 +139,9 @@ def capture_feishu_chat():
 
 # --- 主程序 ---
 def main():
+    """
+    主执行函数
+    """
     # 1. 读取历史聊天记录
     try:
         if os.path.exists(CSV_LOG_FILE):
