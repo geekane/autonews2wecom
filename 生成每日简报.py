@@ -5,21 +5,24 @@ from datetime import datetime
 from openai import OpenAI
 
 # --- 1. 从环境变量加载配置信息 ---
-# 这种方式更安全，尤其是在CI/CD环境中（如GitHub Actions）
 # 飞书 API 配置
 APP_ID = os.environ.get("FEISHU_APP_ID")
 APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
-APP_TOKEN = "BJ2gbK1onahpjZsglTgcxo7Onif" # 这个通常是固定的，可以硬编码
-TABLE_ID = "tbliEUHB9iSxZuiY" # 这个通常是固定的，可以硬编码
+# 下面两个通常固定，如果需要变动也可改为环境变量
+APP_TOKEN = "BJ2gbK1onahpjZsglTgcxo7Onif" 
+TABLE_ID = "tbliEUHB9iSxZuiY" 
 
 # ModelScope LLM API 配置
 MODELSCOPE_API_KEY = os.environ.get("MODELSCOPE_API_KEY")
-MODELSCOPE_MODEL_ID = "Qwen/Qwen3-Next-80B-A3B-Thinking" # 推荐使用增强版以获得更好的长文本总结能力
+MODELSCOPE_MODEL_ID = "Qwen/Qwen3-Next-80B-A3B-Thinking" 
 MODELSCOPE_BASE_URL = "https://api-inference.modelscope.cn/v1"
 
 # Cloudflare Worker 配置
 CF_WORKER_URL = os.environ.get("CF_WORKER_URL")
-CF_AUTH_SECRET = os.environ.get("CF_AUTH_SECRET")
+
+# 【关键修改】这里设置默认值为 '1234'，对应你 Cloudflare 后台的 AUTH_SECRET
+# 如果你的系统环境变量里没有设置 CF_AUTH_SECRET，它就会自动使用 '1234'
+CF_AUTH_SECRET = os.environ.get("CF_AUTH_SECRET", "1234")
 
 # --- 2. API 端点 ---
 TENANT_ACCESS_TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal/"
@@ -27,10 +30,11 @@ SEARCH_RECORDS_URL = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{APP_TOK
 
 
 def check_env_vars():
-    """检查所有必要的环境变量是否已设置"""
+    """检查必要的环境变量"""
+    # CF_AUTH_SECRET 已经有了默认值，所以这里主要检查其他项
     required_vars = [
         "FEISHU_APP_ID", "FEISHU_APP_SECRET",
-        "MODELSCOPE_API_KEY", "CF_WORKER_URL", "CF_AUTH_SECRET"
+        "MODELSCOPE_API_KEY", "CF_WORKER_URL"
     ]
     missing_vars = [var for var in required_vars if not os.environ.get(var)]
     if missing_vars:
@@ -39,7 +43,7 @@ def check_env_vars():
     return True
 
 def get_tenant_access_token(app_id, app_secret):
-    """获取 tenant_access_token"""
+    """获取飞书 tenant_access_token"""
     payload = {"app_id": app_id, "app_secret": app_secret}
     headers = {'Content-Type': 'application/json'}
     print("正在获取飞书 access_token...")
@@ -67,7 +71,6 @@ def parse_rich_text(field_value):
             text_parts.append(item.get("text", ""))
     return "".join(text_parts)
 
-# --- 修改点 1：函数重命名并更新其内部逻辑 ---
 def get_daily_info_with_links(access_token):
     """获取多维表格中最近1天内发布的“完整信息内容”和“视频链接”"""
     headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
@@ -78,10 +81,8 @@ def get_daily_info_with_links(access_token):
         payload = {
             "filter": {
                 "conjunction": "and", 
-                # --- 修改点 1.1：时间范围从 TheLastWeek 改为 TheLastDay ---
                 "conditions": [{"field_name": "发布日期", "operator": "is", "value": ["Yesterday"]}] 
             },
-            # --- 修改点 1.2：获取的字段改为 "完整信息内容" 和 "视频链接" ---
             "field_names": ["完整信息内容", "视频链接", "发布日期"],
             "page_size": 100,
             "page_token": page_token
@@ -99,13 +100,11 @@ def get_daily_info_with_links(access_token):
                 break
             for item in items:
                 fields = item.get('fields', {})
-                # --- 修改点 1.3：获取新的字段内容 ---
                 info_raw = fields.get('完整信息内容')
                 link = fields.get('视频链接')
                 
                 if info_raw:
                     info_text = parse_rich_text(info_raw).strip()
-                    # --- 修改点 1.4：保存包含内容和链接的字典 ---
                     info_data.append({"content": info_text, "link": link})
 
             if data.get('has_more'):
@@ -118,25 +117,22 @@ def get_daily_info_with_links(access_token):
     print(f"查询完成，共找到 {len(info_data)} 条信息。")
     return info_data
 
-# --- 修改点 2：更新生成报告的函数，以处理新的数据结构和Prompt ---
 def generate_report_string(info_entries):
-    """调用大模型，根据带有出处和链接的信息生成完整的日报内容字符串"""
+    """调用大模型生成日报"""
     if not info_entries:
         print("没有信息数据，无法生成日报。")
         return None
         
     raw_text_data_with_links = []
     for item in info_entries:
-        # 如果链接为空或不存在，则提供一个提示
         link = item.get('link') if item.get('link') else "无可用链接"
         entry_str = f"[来源链接: {link}]\n内容: {item.get('content', '')}"
         raw_text_data_with_links.append(entry_str)
     
     final_input_for_llm = "\n--------------------\n".join(raw_text_data_with_links)
     
-    # --- 关键修改点：更新 Prompt，要求明确指出观点提出者 ---
     prompt_template = """
-你是一名专业的行业分析师，专注于中国电竞场馆及线下娱乐行业。你的任务是基于原始视频内容片段，提取并扩写成信息丰富、逻辑清晰、具深度洞察的行业观点。要求每条视频的观点内容必须“更长、更细、更全面”，像真实行业专家撰写的深度日报，而不是简短总结。
+你是一名专业的行业分析师，专注于中国电竞场馆及线下娱乐行业。你的任务是基于原始视频内容片段，提取并扩写成信息丰富、逻辑清晰、具深度洞察的行业观点。
 
 ------------------------------------
 【输出格式要求】
@@ -144,49 +140,27 @@ def generate_report_string(info_entries):
 每条内容严格按以下结构呈现：
 
 一、发布者姓名认为：
-* 观点 1（进行充分扩写，而不是只写一句话）
-* 观点 2（对背景、场景、逻辑进行补充说明）
-* 观点 3（延展行业含义或经营启示）
-* 如视频信息丰富，可继续写更多观点
+* 观点 1（进行充分扩写）
+* 观点 2（补充背景或逻辑）
+* 观点 3（延展行业含义）
+...
 [源](视频链接)
 
 要求：
 1. 开头必须是：“某某某（根据实际情况调整账号名）认为：”
-2. * 列表必须至少 **4–6 条观点**，并且每条观点都要写成 **完整表达句**，不能太短。
+2. * 列表必须至少 **4–6 条观点**，观点要写成 **完整表达句**。
 3. 所有内容按 “一、二、三……” 排序。
-4. 观点务必自然流畅，不要写分析模板词，如“视频未明确但……”“若存在风险……”“补充观点/背景判断”等。
-5. 写作风格要像详细汇总的日报。
-
-------------------------------------
-【内容扩写要求（重点）】
-------------------------------------
-每条视频的内容需写得更丰满，做到：
-
-- 详细拆解发布者原意，而不是简单复述  
-- 对其观点背后的经营逻辑、用户心理、场景细节做进一步说明  
-- 若视频内容包含动作、语气、情绪、店内场景等，也要提取并写进文字  
-- 补充该观点对电竞场馆/网咖经营的启示或行业相关性  
-- 语言自然，不写模板化词语  
-
-你可以（但不强制）将一个简单观点扩写为：
-- 背景 → 现象 → 逻辑 → 启示 的内容结构  
-- 或“观点＋原因＋举例＋行业意义”的形式  
-
-但不要显式写出结构说明，只要写出流畅自然的内容即可。
+4. 写作风格要像详细汇总的日报，避免模板化词语。
 
 ------------------------------------
 【输入格式】
 ------------------------------------
-原始视频内容片段如下，以 "--------------------" 分隔，每段含：
-[来源链接: ...]
-以及视频发布者与内容描述。
-变量：
 {raw_text_data_with_links}
 
 ------------------------------------
 【最终任务】
 ------------------------------------
-请根据以上要求生成《电竞场馆/网咖行业近期观点日报》，让每条视频的观点更详细、更深入、更有信息量、阅读感更强。
+请生成《电竞场馆/网咖行业近期观点日报》。
 """
     final_prompt = prompt_template.format(raw_text_data_with_links=final_input_for_llm)
 
@@ -206,32 +180,42 @@ def generate_report_string(info_entries):
         return None
 
 def save_report_via_worker(report_content):
-    """将生成的报告通过HTTP POST发送到Cloudflare Worker"""
+    """【关键修改】使用 X-Auth-Pass 发送报告到 Cloudflare Worker"""
     if not report_content:
         print("报告内容为空，跳过保存步骤。")
         return
         
     today_date = datetime.now().strftime('%Y-%m-%d')
+    
+    # --- 核心修改部分 ---
+    # 使用 X-Auth-Pass，不再使用 Authorization: Bearer ...
+    # 这与 Worker 端的修改相对应
     headers = {
-        'Authorization': f'Bearer {CF_AUTH_SECRET}',
+        'X-Auth-Pass': CF_AUTH_SECRET, 
         'Content-Type': 'application/json'
     }
+    # ------------------
+
+    post_url = CF_WORKER_URL
+    
     payload = {
         'date': today_date,
         'content': report_content
     }
 
-    post_url = CF_WORKER_URL
-    
     print(f"\n正在将报告发送到 {post_url} ...")
     try:
         response = requests.post(post_url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        print(f"报告保存成功！服务器响应: {response.json()}")
+        
+        # 检查响应
+        if response.status_code == 200:
+            print(f"报告保存成功！服务器响应: {response.json()}")
+        else:
+            print(f"保存失败 (状态码 {response.status_code})")
+            print(f"服务器返回信息: {response.text}")
+            
     except requests.exceptions.RequestException as e:
-        print(f"发送报告失败: {e}")
-        if hasattr(e, 'response') and e.response:
-            print(f"服务器响应 (状态码 {e.response.status_code}): {e.response.text}")
+        print(f"发送报告网络请求错误: {e}")
 
 def main():
     """主执行函数"""
@@ -245,7 +229,6 @@ def main():
         print("\n程序终止。")
         return
 
-    # --- 修改点 3：调用更新后的函数 ---
     info_entries = get_daily_info_with_links(token)
     if not info_entries:
         print("\n未找到任何信息，程序终止。")
