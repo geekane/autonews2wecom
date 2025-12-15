@@ -250,35 +250,48 @@ def eth_report():
     history = load_history()
     
     if eth_price_float is None:
-        save_history(history)
-        send_wechat_message(access_token, "运行失败", "以太坊 (ETH)", "N/A", "未能获取价格", "请检查网络或API状态。")
+        # 如果获取价格失败，可以选择不发送，或者记录日志
+        logging.error("获取价格失败，跳过本次执行")
         return
 
+    # 1. 记录历史数据 (即使不发消息，也建议记录数据以便后续分析)
     current_time = datetime.now(timezone.utc).isoformat()
     history.append({"timestamp": current_time, "price": eth_price_float})
     
     if len(history) > MAX_HISTORY_POINTS:
         history = history[-MAX_HISTORY_POINTS:]
+    
+    save_history(history) # 保存历史记录
 
-    analysis = analyze_with_llm(history, eth_price_float)
-    
-    save_history(history)
-    
-    # 准备发送给微信的数据
     formatted_price = f"${eth_price_float:,.2f}"
-    product_name = "以太坊 (ETH)"
-    current_price_val = formatted_price
-    suggestion = analysis.get('suggestion', '分析无结果')
-    remark_details = analysis.get('reason', '未能获取分析详情。')
-    
-    title = f"ETH AI 分析报告：{suggestion}"
-    if eth_price_float < 2100 or eth_price_float > 3800:
-        title = f"价格预警！ETH 现价 {formatted_price}"
-        logging.info(f"价格触发提醒条件 (< 2100 or > 3800)。")
-    
-    send_wechat_message(access_token, title, product_name, current_price_val, suggestion, remark_details)
-    logging.info("eth_report 函数结束")
 
+    # ============================================================
+    # 核心修改：添加判断逻辑，决定是否继续
+    # ============================================================
+    if eth_price_float < 3000 or eth_price_float > 3500:
+        logging.info(f"当前价格 {formatted_price} 触发推送条件 (<3000 或 >3500)，准备分析并发送...")
+
+        # 2. 只有需要发送消息时，才调用 AI 进行分析 (这样还能省 AI 的钱)
+        analysis = analyze_with_llm(history, eth_price_float)
+        
+        product_name = "以太坊 (ETH)"
+        current_price_val = formatted_price
+        suggestion = analysis.get('suggestion', '分析无结果')
+        remark_details = analysis.get('reason', '未能获取分析详情。')
+        
+        # 设置标题
+        title = f"价格预警！ETH 现价 {formatted_price}"
+        
+        # 3. 发送消息
+        send_wechat_message(access_token, title, product_name, current_price_val, suggestion, remark_details)
+        logging.info("消息推送成功。")
+        
+    else:
+        # 如果价格在 3000 到 3500 之间
+        logging.info(f"当前价格 {formatted_price} 处于 3000-3500 之间，属于静默区间，不发送消息。")
+
+    logging.info("eth_report 函数结束")
+    
 if __name__ == "__main__":
     logging.info("__main__ 开始")
     eth_report()
