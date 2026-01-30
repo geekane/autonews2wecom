@@ -28,7 +28,6 @@ CF_AUTH_SECRET = os.environ.get("CF_AUTH_SECRET", "1234")
 TENANT_ACCESS_TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal/"
 SEARCH_RECORDS_URL = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{APP_TOKEN}/tables/{TABLE_ID}/records/search"
 
-
 def check_env_vars():
     """检查必要的环境变量"""
     # CF_AUTH_SECRET 已经有了默认值，所以这里主要检查其他项
