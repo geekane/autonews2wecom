@@ -51,7 +51,7 @@ jobs:
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
           FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-        run: python chouyong_cli.py
+        run: python chouyong_cli1.py
 
       - name: 8. 上传日志与调试文件
         if: always() # 确保无论成功或失败，都上传产物
