@@ -21,12 +21,11 @@ CF_AUTH_SECRET = os.environ.get("CF_AUTH_SECRET", "1234")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 
 # ==========================================
-# 【全新替换】使用自定义的 Gemini LLM 配置
+# 使用自定义的 Gemini LLM 配置
 # ==========================================
 CUSTOM_LLM_API_KEY = "123456" 
 CUSTOM_LLM_MODEL_ID = "gemini-2.5-flash-lite" 
 CUSTOM_LLM_BASE_URL = "https://aiclient-2-api-89ny.onrender.com/v1"
-
 
 # ==========================================
 # 2. API 端点定义
@@ -156,12 +155,11 @@ def get_industry_news():
         return[]
 
 def generate_report_string(info_entries, news_entries):
-    """调用 Gemini 大模型生成综合日报（内部观点 + 外部新闻）"""
+    """调用 Gemini 大模型生成综合日报"""
     if not info_entries and not news_entries:
         print("今日内部和外部均无信息数据，无法生成日报。")
         return None
         
-    # 1. 组装内部数据字符串
     internal_data_str = ""
     if info_entries:
         raw_texts =[f"[来源: {item.get('link') or '无'}]\n内容: {item.get('content', '')}" for item in info_entries]
@@ -169,7 +167,6 @@ def generate_report_string(info_entries, news_entries):
     else:
         internal_data_str = "今日暂无内部监测的视频观点信息更新。"
 
-    # 2. 组装外部新闻字符串
     external_data_str = ""
     if news_entries:
         news_texts =[f"[新闻标题]: {item['title']}\n[内容摘要]: {item['content']}\n[新闻来源]: {item['url']}" for item in news_entries]
@@ -177,7 +174,6 @@ def generate_report_string(info_entries, news_entries):
     else:
         external_data_str = "今日暂无获取到外部重大的行业新闻。"
     
-    # 3. 构建全新的 Prompt
     prompt_template = """
 你是一名资深的行业分析师，专注于中国【网咖、电竞场馆、电竞酒店】等线下娱乐行业。
 今天你需要结合【内部监测视频内容】与【外部实时行业新闻】，生成一份高价值、具深度洞察的《电竞/网咖行业观点与动态日报》。
@@ -207,8 +203,7 @@ def generate_report_string(info_entries, news_entries):
 要求：提取最具商业价值和参考意义的新闻（3-5条），格式如下：
 1. 【提炼的核心新闻标题】
    - 核心摘要：简述新闻事件的核心要点。
-   - 行业洞察：结合你的专业知识，用一两句话点评该事件对中国网咖/电竞馆/电竞酒店行业的潜在影响或启发。
-   [新闻来源](此处填入提供的链接)
+   - 行业洞察：结合你的专业知识，用一两句话点评该事件对中国网咖/电竞馆/电竞酒店行业的潜在影响或启发。[新闻来源](此处填入提供的链接)
 
 注意：排版要清晰美观，避免枯燥的机器口吻，重点突出能给网吧/电竞馆老板带来启发的商业逻辑。
 """
@@ -221,14 +216,12 @@ def generate_report_string(info_entries, news_entries):
     try:
         client = OpenAI(base_url=CUSTOM_LLM_BASE_URL, api_key=CUSTOM_LLM_API_KEY)
         
-        # 发送非流式请求
         response = client.chat.completions.create(
             model=CUSTOM_LLM_MODEL_ID,
             messages=[{'role': 'user', 'content': final_prompt}],
             stream=False 
         )
         
-        # 提取生成的文本内容
         report_content = response.choices[0].message.content
         print("综合日报内容生成成功！")
         return report_content
@@ -278,4 +271,18 @@ def main():
 
     # 1. 获取内部飞书数据
     token = get_tenant_access_token(APP_ID, APP_SECRET)
-    info_entries = get_daily_info_with_links(token) if token else
+    info_entries = get_daily_info_with_links(token) if token else[]
+
+    # 2. 获取外部新闻数据
+    news_entries = get_industry_news()
+
+    # 3. 生成综合报告
+    report_content = generate_report_string(info_entries, news_entries)
+    
+    # 4. 保存报告
+    save_report_via_worker(report_content)
+    
+    print("\n--- 任务执行完毕 ---")
+
+if __name__ == "__main__":
+    main()
