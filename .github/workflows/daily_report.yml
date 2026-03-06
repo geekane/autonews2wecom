@@ -30,3 +30,5 @@ jobs:
           MODELSCOPE_API_KEY: ${{ secrets.MODELSCOPE_API_KEY }}
           CF_WORKER_URL: ${{ secrets.CF_WORKER_URL }}
           CF_AUTH_SECRET: ${{ secrets.CF_AUTH_SECRET }}
+          # 【这里是新增的，把后台的 Secret 传给 Python】
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
