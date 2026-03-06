@@ -85,7 +85,7 @@ def get_daily_info_with_links(access_token):
         payload = {
             "filter": {
                 "conjunction": "and", 
-                "conditions": [{"field_name": "发布日期", "operator": "is", "value": ["Yesterday"]}] 
+                "conditions":[{"field_name": "发布日期", "operator": "is", "value": ["Yesterday"]}] 
             },
             "field_names":["完整信息内容", "视频链接", "发布日期"],
             "page_size": 100,
@@ -122,12 +122,11 @@ def get_daily_info_with_links(access_token):
     return info_data
 
 def get_industry_news():
-    """【新增】使用 Tavily API 获取最新的网咖/电竞行业新闻"""
+    """使用 Tavily API 获取最新的网咖/电竞行业新闻"""
     print("\n开始通过 Tavily 获取外部行业最新资讯...")
     url = "https://api.tavily.com/search"
     payload = {
         "api_key": TAVILY_API_KEY,
-        # 针对你的赛道高度定制了搜索词
         "query": "中国 网咖 网吧 电竞场馆 电竞酒店 行业最新动态 发展趋势 政策", 
         "search_depth": "basic",
         "topic": "news", # 启用新闻模式，确保时效性
@@ -162,7 +161,7 @@ def generate_report_string(info_entries, news_entries):
     # 1. 组装内部数据字符串
     internal_data_str = ""
     if info_entries:
-        raw_texts = [f"[来源: {item.get('link') or '无'}]\n内容: {item.get('content', '')}" for item in info_entries]
+        raw_texts =[f"[来源: {item.get('link') or '无'}]\n内容: {item.get('content', '')}" for item in info_entries]
         internal_data_str = "\n--------------------\n".join(raw_texts)
     else:
         internal_data_str = "今日暂无内部监测的视频观点信息更新。"
@@ -271,4 +270,19 @@ def main():
 
     # 1. 获取内部飞书数据
     token = get_tenant_access_token(APP_ID, APP_SECRET)
-    info_entries = get_daily_info_with_links(token) if token else
+    info_entries = get_daily_info_with_links(token) if token else[]
+
+    # 2. 获取外部新闻数据
+    news_entries = get_industry_news()
+
+    # 3. 生成综合报告
+    report_content = generate_report_string(info_entries, news_entries)
+    
+    # 4. 保存并发送报告
+    save_report_via_worker(report_content)
+    
+    print("\n--- 任务执行完毕 ---")
+
+
+if __name__ == "__main__":
+    main()
