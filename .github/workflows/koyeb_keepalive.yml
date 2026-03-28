@@ -1,0 +1,33 @@
+name: Koyeb 保活访问
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # 每5分钟执行一次
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 安装 Playwright
+        run: |
+          pip install playwright
+          playwright install chromium --with-deps
+
+      - name: 访问网站并停留30秒
+        run: |
+          python3 -c "
+          from playwright.sync_api import sync_playwright
+          import time
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page()
+              print('正在访问 Koyeb 应用...')
+              page.goto('https://willowy-alida-1226test-e9baa079.koyeb.app/', timeout=60000)
+              print(f'页面标题: {page.title()}')
+              print('停留30秒中...')
+              time.sleep(30)
+              print('访问完成，关闭浏览器')
+              browser.close()
+          "
