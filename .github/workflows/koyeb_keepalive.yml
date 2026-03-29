@@ -2,7 +2,7 @@ name: Koyeb 保活访问
 
 on:
   schedule:
-    - cron: '*/20 * * * *'  # 每20分钟执行一次
+    - cron: '*/5 * * * *'  # 每20分钟执行一次
   workflow_dispatch: # 允许手动触发
 
 jobs:
