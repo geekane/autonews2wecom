@@ -21,7 +21,7 @@ TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 # ==========================================
 # 使用自定义的 Gemini LLM 配置
 # ==========================================
-CUSTOM_LLM_API_KEY = "AIzaSyCWx18KS9meFlPWU2smYrXWhSSsSL8EH4Y" 
+CUSTOM_LLM_API_KEY = os.environ.get("GEMINI_LLM_API_KEY") 
 CUSTOM_LLM_MODEL_ID = "gemini-3.1-flash-lite-preview" 
 CUSTOM_LLM_BASE_URL = "https://gemini.zzh2025.dpdns.org/v1"
 
