@@ -35,11 +35,16 @@ if hasattr(sys.stdout, 'buffer'):
 # ==============================================================================
 # --- 核心配置 ---
 # ==============================================================================
-SILICONFLOW_API_KEY = "sk-nexfkxivirurtdvbpzkjgjcyplorwkssfitcvnppeaclunbe"
-FEISHU_APP_ID = "cli_a8ad5b52783b901c"
-FEISHU_APP_SECRET = "DK8advnsYeChNF0yltKvKeqiQiYiAnyC"
-FEISHU_APP_TOKEN = "BJ2gbK1onahpjZsglTgcxo7Onif"
-FEISHU_TABLE_ID = "tbliEUHB9iSxZuiY"
+SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY")
+FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
+FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
+FEISHU_APP_TOKEN = os.getenv("FEISHU_APP_TOKEN")
+FEISHU_TABLE_ID = os.getenv("FEISHU_TABLE_ID")
+
+# 检查必要变量是否存在
+if not all([SILICONFLOW_API_KEY, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_APP_TOKEN, FEISHU_TABLE_ID]):
+    print("错误: 缺失必要的环境变量配置，请检查 GitHub Secrets 设置。")
+    # sys.exit(1) # 可选：如果缺失则停止运行
 
 # ==============================================================================
 # --- 基础配置 ---
