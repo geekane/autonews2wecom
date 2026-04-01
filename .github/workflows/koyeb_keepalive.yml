@@ -27,7 +27,7 @@ jobs:
               page.goto('https://willowy-alida-1226test-e9baa079.koyeb.app/', timeout=60000)
               print(f'页面标题: {page.title()}')
               print('停留30秒中...')
-              time.sleep(600)
+              time.sleep(60)
               print('访问完成，关闭浏览器')
               browser.close()
           "
