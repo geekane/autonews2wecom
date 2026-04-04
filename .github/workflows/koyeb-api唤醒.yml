@@ -13,8 +13,8 @@ jobs:
         run: |
           # 下载并安装 Koyeb CLI
           curl -sSl https://raw.githubusercontent.com/koyeb/koyeb-cli/master/install.sh | bash
-          # 将二进制文件移动到系统路径
-          sudo mv bin/koyeb /usr/local/bin/koyeb
+          # 【修复点】使用正确的绝对路径，将二进制文件移动到系统路径
+          sudo mv $HOME/.koyeb/bin/koyeb /usr/local/bin/koyeb
           # 验证安装
           koyeb version
 
@@ -24,6 +24,6 @@ jobs:
           KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
         run: |
           echo "开始触发重新部署 willowy-alida/seven ..."
-          # 直接使用你的真实 App/Service 名称
+          # 触发真正的重部署动作
           koyeb service redeploy willowy-alida/seven
           echo "重新部署指令已发送！"
