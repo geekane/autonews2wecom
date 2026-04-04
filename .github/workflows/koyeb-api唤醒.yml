@@ -2,7 +2,10 @@ name: Koyeb 自动重新部署保活
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # 每 5 分钟执行一次，防止半小时断电
+    - cron: '*/5 * * * *'  # 每 5 分钟执行一次
+  push:
+    paths:
+      - '.github/workflows/koyeb-api唤醒.yml'  # 每次修改这个 yml 文件并提交时，自动触发执行
   workflow_dispatch: # 允许在 Actions 页面手动点击运行
 
 jobs:
@@ -13,7 +16,7 @@ jobs:
         run: |
           # 下载并安装 Koyeb CLI
           curl -sSl https://raw.githubusercontent.com/koyeb/koyeb-cli/master/install.sh | bash
-          # 【修复点】使用正确的绝对路径，将二进制文件移动到系统路径
+          # 使用正确的绝对路径，将二进制文件移动到系统路径
           sudo mv $HOME/.koyeb/bin/koyeb /usr/local/bin/koyeb
           # 验证安装
           koyeb version
