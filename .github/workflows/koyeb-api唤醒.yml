@@ -1,0 +1,29 @@
+name: Koyeb 自动重新部署保活
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # 每 5 分钟执行一次，防止半小时断电
+  workflow_dispatch: # 允许在 Actions 页面手动点击运行
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 安装 Koyeb CLI
+        run: |
+          # 下载并安装 Koyeb CLI
+          curl -sSl https://raw.githubusercontent.com/koyeb/koyeb-cli/master/install.sh | bash
+          # 将二进制文件移动到系统路径
+          sudo mv bin/koyeb /usr/local/bin/koyeb
+          # 验证安装
+          koyeb version
+
+      - name: 触发 Koyeb 服务重新部署
+        env:
+          # 从 GitHub Secrets 中读取 Token
+          KOYEB_TOKEN: ${{ secrets.KOYEB_TOKEN }}
+        run: |
+          echo "开始触发重新部署 willowy-alida/seven ..."
+          # 直接使用你的真实 App/Service 名称
+          koyeb service redeploy willowy-alida/seven
+          echo "重新部署指令已发送！"
