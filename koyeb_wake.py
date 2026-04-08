@@ -1,57 +1,60 @@
-import requests
 import os
+import time
 import datetime
+import subprocess
 
-# ================= 配置区域 =================
-# 你可以在这里直接写死你的 Koyeb 应用地址，或者在 GitHub Secrets 设置 TARGET_URLS
-# 多个地址用逗号分隔
-TARGET_URLS = os.getenv("TARGET_URLS", "https://你的应用名字.koyeb.app")
-# ===========================================
+# 要重新部署的项目名称
+SERVICE_NAME = "willowy-alida/seven"
 
-def wake_up():
+def redeploy_service():
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    print(f"==========================================")
-    print(f"⏰ 开始执行唤醒任务 | 时间: {now}")
+    print(f"\n==========================================")
+    print(f"⏰ 触发重部署任务 | 当前时间: {now}")
     print(f"==========================================")
 
-    url_list = [url.strip() for url in TARGET_URLS.split(",") if url.strip()]
+    # 每次执行时动态获取环境变量，确保安全
+    koyeb_token = os.getenv("KOYEB_TOKEN")
     
-    if not url_list:
-        print("❌ 错误: 未配置目标 URL，请检查环境变量 TARGET_URLS")
+    if not koyeb_token:
+        print("❌ [错误] 找不到 KOYEB_TOKEN 环境变量！")
+        print("💡 请确保在 ClawCloud 的容器环境变量设置中添加了 KOYEB_TOKEN。")
         return
 
-    session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
-        'Cache-Control': 'no-cache'
-    })
+    print(f"▶ 正在向 Koyeb 发送 [{SERVICE_NAME}] 的重新部署指令...")
+    
+    # 组合 Koyeb CLI 命令
+    # Koyeb CLI 会自动读取系统中的 KOYEB_TOKEN 环境变量
+    cmd = f"koyeb service redeploy {SERVICE_NAME}"
+    
+    try:
+        start_time = time.time()
+        # 执行系统命令
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        cost_time = round(time.time() - start_time, 2)
 
-    for i, url in enumerate(url_list, 1):
-        print(f"\n[任务 {i}] 正在尝试唤醒: {url}")
-        try:
-            # 发送 GET 请求
-            response = session.get(url, timeout=15)
+        # 检查命令执行是否成功 (返回码 0 表示成功)
+        if result.returncode == 0:
+            print(f"✅ [成功] 重新部署指令已成功发送！")
+            print(f"   └─ 目标项目: {SERVICE_NAME}")
+            print(f"   └─ 耗时: {cost_time} 秒")
+            print(f"   └─ Koyeb 返回信息: {result.stdout.strip() or '无详细信息'}")
+        else:
+            print(f"❌ [失败] 发送重新部署指令失败！")
+            print(f"   └─ 错误码: {result.returncode}")
+            print(f"   └─ 错误信息: {result.stderr.strip()}")
             
-            # 详细日志输出
-            if response.status_code == 200:
-                print(f"✅ [成功] 目标响应正常！")
-                print(f"   - 状态码: {response.status_code}")
-                print(f"   - 响应大小: {len(response.text)} 字节")
-            elif response.status_code == 503:
-                print(f"⚠️ [提示] 服务可能正在启动中 (503)...")
-            else:
-                print(f"❓ [警告] 收到异常状态码: {response.status_code}")
-                
-        except requests.exceptions.Timeout:
-            print(f"❌ [错误] 连接超时，目标可能已经彻底休眠或网络不通。")
-        except requests.exceptions.ConnectionError:
-            print(f"❌ [错误] 无法建立连接，请检查 URL 是否正确。")
-        except Exception as e:
-            print(f"❌ [未知错误] 发生异常: {str(e)}")
+    except Exception as e:
+         print(f"❌ [系统异常] 运行 Koyeb CLI 时发生错误: {str(e)}")
 
-    print(f"\n==========================================")
-    print(f"🏁 所有唤醒任务已完成 | 结束时间: {datetime.datetime.now().strftime('%H:%M:%S')}")
+    print(f"==========================================")
+    print(f"⏳ 任务结束，等待 5 分钟后进行下一次唤醒...")
     print(f"==========================================")
 
 if __name__ == "__main__":
-    wake_up()
+    print("🚀 Koyeb 自动重部署服务已启动容器...")
+    print(f"🎯 目标应用: {SERVICE_NAME}")
+    
+    # 无限循环，每 5 分钟（300秒）执行一次
+    while True:
+        redeploy_service()
+        time.sleep(300)
