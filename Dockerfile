@@ -5,6 +5,9 @@ FROM python:3.9-slim
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
+# 【关键修复】禁用 Python 输出缓冲，强制日志实时打印到控制台
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 # 安装必要的系统工具 (curl 和 bash)，并安装 Koyeb CLI
