@@ -54,7 +54,7 @@ if __name__ == "__main__":
     print("🚀 Koyeb 自动重部署服务已启动容器...")
     print(f"🎯 目标应用: {SERVICE_NAME}")
     
-    # 无限循环，每 5 分钟（300秒）执行一次
+    # 无限循环，每 50 分钟（3000秒）执行一次
     while True:
         redeploy_service()
-        time.sleep(300)
+        time.sleep(3000)
