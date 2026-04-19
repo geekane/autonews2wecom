@@ -64,9 +64,9 @@ if __name__ == "__main__":
         
         redeploy_service()
         
-        print(f"💤 第 【{loop_count}】 次循环结束，开始休眠 3000 秒 (50分钟)...")
+        print(f"💤 第 【{loop_count}】 次循环结束，开始休眠 1800 秒 (30分钟)...")
         print(f"🔍 排错指南: 请观察 5 分钟后，日志是打印了“第 {loop_count + 1} 次循环”，还是重新打印了“🌟 [容器/脚本真正启动]”")
         
-        time.sleep(3000)
+        time.sleep(1800)
         
         loop_count += 1
