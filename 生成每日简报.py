@@ -351,9 +351,9 @@ def main():
     
     save_report_via_worker(report_content)
 
-    # 向钟志恒、田健发送飞书推送通知
-    summary = report_content[:300] if report_content else "今日日报生成失败"
-    send_feishu_notification(f"✅ 每日网咖简报已生成\n\n{summary}\n\n详情请查看飞书多维表格。")
+    # 向钟志恒、田健发送飞书推送通知（纯文本提醒，不带截断的正文，避免乱码）
+    today_str = datetime.now().strftime('%m/%d')
+    send_feishu_notification(f"✅ {today_str} 每日网咖简报已生成，请查看飞书多维表格查看完整内容。")
     
     print("\n--- 任务执行完毕 ---")
 
