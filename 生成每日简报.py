@@ -352,6 +352,10 @@ def main():
     report_content = generate_report_string(info_entries, news_entries)
     
     save_report_via_worker(report_content)
+
+    # 向钟志恒、田健发送飞书推送通知
+    summary = report_content[:300] if report_content else "今日日报生成失败"
+    send_feishu_notification(f"✅ 每日网咖简报已生成\n\n{summary}\n\n详情请查看飞书多维表格。")
     
     print("\n--- 任务执行完毕 ---")
 
