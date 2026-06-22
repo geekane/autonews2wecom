@@ -277,47 +277,80 @@ def save_report_via_worker(report_content):
     except Exception as e:
         print(f"发送报告网络请求错误: {e}")
 
-def _format_report_for_feishu(report_content):
-    """将 Markdown 格式的日报转为飞书友好的纯文本格式"""
+def _parse_line_to_segments(line):
+    """将一行文本按 **bold** 和 [text](url) 拆分为 Feishu Post 富文本片段"""
+    segments = []
+    pattern = re.compile(r'\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)]+)\)')
+    last_end = 0
+    for m in pattern.finditer(line):
+        # 匹配前的纯文本
+        if m.start() > last_end:
+            text = line[last_end:m.start()]
+            if text:
+                segments.append({"tag": "text", "text": text})
+        if m.group(1) is not None:
+            # **bold**
+            segments.append({"tag": "text", "text": m.group(1), "style": ["bold"]})
+        else:
+            # [text](url)
+            segments.append({"tag": "a", "text": m.group(2), "href": m.group(3)})
+        last_end = m.end()
+    # 行尾剩余文本
+    if last_end < len(line):
+        remaining = line[last_end:]
+        if remaining:
+            segments.append({"tag": "text", "text": remaining})
+    return segments
+
+
+def _build_feishu_post(report_content, today_str):
+    """
+    将 Markdown 日报转为 Feishu Post（富文本）格式。
+
+    返回 (post_dict, fallback_text) — 若网关不支持 post 可用 fallback_text 降级为 text。
+    """
     if not report_content:
-        return "❌ 今日日报生成失败"
-    
+        return None, "❌ 今日日报生成失败"
+
     text = report_content
-    
-    # Markdown 链接 [text](url) → text: url（Feishu 文本消息中完整 URL 会自动变为可点击）
-    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\1: \2', text)
-    # 去除加粗/斜体标记
-    text = text.replace('**', '')
-    text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
-    # 去除 ### 标题标记
+    # 去除 ### 标题标记（保留文字）
     text = re.sub(r'^#{1,4}\s+', '', text, flags=re.MULTILINE)
-    # 压缩多余空行为单空行
+    # 压缩空行
     text = re.sub(r'\n{3,}', '\n\n', text)
-    # 去除行尾多余空格
-    text = re.sub(r'[ \t]+\n', '\n', text)
-    
-    return text.strip()
+    text = text.strip()
+
+    lines = text.split('\n')
+    post_content = []
+    for line in lines:
+        if not line.strip():
+            post_content.append([{"tag": "text", "text": ""}])
+        else:
+            segs = _parse_line_to_segments(line.strip())
+            if segs:
+                post_content.append(segs)
+
+    title = f"📋 {today_str} 网咖经营日报"
+    post_dict = {"zh_cn": {"title": title, "content": post_content}}
+
+    # 同时构建纯文本降级内容
+    fallback = text
+    fallback = re.sub(r'\*\*(.+?)\*\*', r'\1', fallback)
+    fallback = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\1: \2', fallback)
+
+    return post_dict, fallback
 
 
 def send_feishu_notification(report_content, test_mode=True):
     """
-    通过公司网关接口发送飞书通知，自动格式化日报内容。
-    
+    通过公司网关接口发送飞书通知（Feishu Post 富文本格式，支持加粗 + 可点击链接）。
+
     参数:
         report_content: AI 生成的日报完整内容（Markdown 格式）
         test_mode: True=只发给钟志恒测试；False=发给全部接收人
     """
-    # 格式化日报为飞书友好文本
-    formatted = _format_report_for_feishu(report_content)
     today_str = datetime.now().strftime('%m/%d')
-    
-    # 组装消息正文
-    message_text = (
-        f"━━━ 📋 {today_str} 网咖经营日报 ━━━\n\n"
-        f"{formatted}\n\n"
-        f"━━━ 数据来源：飞书多维表格 ━━━"
-    )
-    
+    post_data, fallback_text = _build_feishu_post(report_content, today_str)
+
     url = "https://mp3.jingchaowan.cn/api/upload"
     headers = {
         "X-Custom-Action": "feishu_send_message",
@@ -325,51 +358,66 @@ def send_feishu_notification(report_content, test_mode=True):
         "X-Auth-Pass": "123456",
         "Content-Type": "application/json"
     }
-    message_content = {"text": message_text}
-    
-    # 接收人：测试模式只发钟志恒，正式模式添加其他人
+
+    # 接收人
     recipients = [("钟志恒", "ou_8b26f4ea694e64f0967beee347dd13f3")]
     if not test_mode:
         recipients.append(("田健", "ou_9071e3070894e26b90d3fba48b1a483c"))
         print("[飞书通知] 正式模式：将发送给全部接收人")
     else:
         print("[飞书通知] 测试模式：仅发送给钟志恒")
-    
+
     for name, open_id in recipients:
-        payload = {
-            "receive_id": open_id,
-            "msg_type": "text",
-            "receive_id_type": "open_id",
-            "content": json.dumps(message_content)
-        }
-        
-        print(f"[飞书通知] 准备向 {name} ({open_id}) 发送提醒...")
         max_retries = 5
         success = False
+
         for attempt in range(max_retries):
+            # 首次尝试用 Post 富文本，若失败则降级为纯文本
+            use_post = (attempt == 0 and post_data is not None)
+            if use_post:
+                payload = {
+                    "receive_id": open_id,
+                    "msg_type": "post",
+                    "receive_id_type": "open_id",
+                    "content": json.dumps(post_data)
+                }
+                label = "Post 富文本"
+            else:
+                message_text = f"━━━ 📋 {today_str} 网咖经营日报 ━━━\n\n{fallback_text}\n\n━━━ 数据来源：飞书多维表格 ━━━"
+                payload = {
+                    "receive_id": open_id,
+                    "msg_type": "text",
+                    "receive_id_type": "open_id",
+                    "content": json.dumps({"text": message_text})
+                }
+                label = "纯文本（降级）"
+
+            print(f"[飞书通知] 准备向 {name} 发送 ({label})...")
             try:
                 response = requests.post(url, headers=headers, json=payload, timeout=15)
                 result = response.json()
                 if result.get("success"):
-                    print(f"[飞书通知] ✅ 成功向 {name} 发送提醒（{len(message_text)} 字符）")
+                    print(f"[飞书通知] ✅ 成功向 {name} 发送 ({label})")
                     success = True
                     break
-                else:
-                    detail = result.get("detail", "")
-                    print(f"[飞书通知] 向 {name} 第 {attempt+1} 次尝试失败: {result.get('message')} ({detail})")
-                    if "timeout" not in detail.lower() and "exception" not in detail.lower():
-                        break
+                detail = result.get("detail", "")
+                print(f"[飞书通知] 向 {name} 第 {attempt+1} 次尝试失败: {result.get('message')} ({detail})")
+                # 非网络类错误不重试
+                if "timeout" not in detail.lower() and "exception" not in detail.lower():
+                    # 如果 Post 失败且尚未尝试过纯文本, 继续循环用纯文本重试
+                    if use_post:
+                        continue  # 立刻用纯文本重试（同一次 attempt）
+                    break
             except Exception as e:
                 print(f"[飞书通知] 向 {name} 第 {attempt+1} 次尝试请求异常: {e}")
-                
+
             if attempt < max_retries - 1:
                 wait_time = (attempt + 1) * 3
                 print(f"[飞书通知] 将在 {wait_time} 秒后重试向 {name} 发送...")
                 time.sleep(wait_time)
-        
+
         if not success:
             print(f"[飞书通知] ❌ [错误] 向 {name} 发送通知重试 {max_retries} 次均失败。")
-            
         time.sleep(1.0)
 
 
