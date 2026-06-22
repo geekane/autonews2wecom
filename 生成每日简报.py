@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 import json
 import time
@@ -276,12 +277,49 @@ def save_report_via_worker(report_content):
     except Exception as e:
         print(f"发送报告网络请求错误: {e}")
 
-def send_feishu_notification(text):
-    """
-    通过公司网关接口向指定人员（钟志恒、田健）发送飞书通知（引入 5 次重试机制应对网关与飞书之间的瞬时网络超时）
+def _format_report_for_feishu(report_content):
+    """将 Markdown 格式的日报转为飞书友好的纯文本格式"""
+    if not report_content:
+        return "❌ 今日日报生成失败"
     
-    注意：GitHub Actions 环境下必须同步执行，daemon 线程会被主进程退出时强制杀死。
+    text = report_content
+    
+    # 去除 Markdown 链接 [text](url) → text
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    # 去除孤立 URL（纯 http/https 链接）
+    text = re.sub(r'https?://\S+', '', text)
+    # 去除加粗/斜体标记
+    text = text.replace('**', '')
+    text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
+    # 去除 ### 标题标记
+    text = re.sub(r'^#{1,4}\s+', '', text, flags=re.MULTILINE)
+    # 压缩多余空行为单空行
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    # 去除行尾多余空格
+    text = re.sub(r'[ \t]+\n', '\n', text)
+    
+    return text.strip()
+
+
+def send_feishu_notification(report_content, test_mode=True):
     """
+    通过公司网关接口发送飞书通知，自动格式化日报内容。
+    
+    参数:
+        report_content: AI 生成的日报完整内容（Markdown 格式）
+        test_mode: True=只发给钟志恒测试；False=发给全部接收人
+    """
+    # 格式化日报为飞书友好文本
+    formatted = _format_report_for_feishu(report_content)
+    today_str = datetime.now().strftime('%m/%d')
+    
+    # 组装消息正文
+    message_text = (
+        f"━━━ 📋 {today_str} 网咖经营日报 ━━━\n\n"
+        f"{formatted}\n\n"
+        f"━━━ 数据来源：飞书多维表格 ━━━"
+    )
+    
     url = "https://mp3.jingchaowan.cn/api/upload"
     headers = {
         "X-Custom-Action": "feishu_send_message",
@@ -289,15 +327,15 @@ def send_feishu_notification(text):
         "X-Auth-Pass": "123456",
         "Content-Type": "application/json"
     }
-    message_content = {
-        "text": text
-    }
+    message_content = {"text": message_text}
     
-    # 飞书接收人列表
-    recipients = [
-        ("钟志恒", "ou_8b26f4ea694e64f0967beee347dd13f3"),
-        ("田健", "ou_9071e3070894e26b90d3fba48b1a483c")
-    ]
+    # 接收人：测试模式只发钟志恒，正式模式添加其他人
+    recipients = [("钟志恒", "ou_8b26f4ea694e64f0967beee347dd13f3")]
+    if not test_mode:
+        recipients.append(("田健", "ou_9071e3070894e26b90d3fba48b1a483c"))
+        print("[飞书通知] 正式模式：将发送给全部接收人")
+    else:
+        print("[飞书通知] 测试模式：仅发送给钟志恒")
     
     for name, open_id in recipients:
         payload = {
@@ -315,7 +353,7 @@ def send_feishu_notification(text):
                 response = requests.post(url, headers=headers, json=payload, timeout=15)
                 result = response.json()
                 if result.get("success"):
-                    print(f"[飞书通知] 成功向 {name} 发送提醒：{text[:20]}...")
+                    print(f"[飞书通知] ✅ 成功向 {name} 发送提醒（{len(message_text)} 字符）")
                     success = True
                     break
                 else:
@@ -332,7 +370,7 @@ def send_feishu_notification(text):
                 time.sleep(wait_time)
         
         if not success:
-            print(f"[飞书通知] [错误] 向 {name} 发送通知重试 {max_retries} 次均失败。")
+            print(f"[飞书通知] ❌ [错误] 向 {name} 发送通知重试 {max_retries} 次均失败。")
             
         time.sleep(1.0)
 
@@ -351,9 +389,8 @@ def main():
     
     save_report_via_worker(report_content)
 
-    # 向钟志恒、田健发送飞书推送通知（纯文本提醒，不带截断的正文，避免乱码）
-    today_str = datetime.now().strftime('%m/%d')
-    send_feishu_notification(f"✅ {today_str} 每日网咖简报已生成，请查看飞书多维表格查看完整内容。")
+    # 发送飞书通知：test_mode=True 先只发给钟志恒测试，确认效果后改为 False
+    send_feishu_notification(report_content, test_mode=True)
     
     print("\n--- 任务执行完毕 ---")
 
