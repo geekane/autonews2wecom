@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import time
+import threading
 from datetime import datetime
 from openai import OpenAI
 
@@ -275,6 +276,68 @@ def save_report_via_worker(report_content):
             print(f"保存失败 (状态码 {response.status_code})")
     except Exception as e:
         print(f"发送报告网络请求错误: {e}")
+
+def send_feishu_notification(text):
+    """
+    通过公司网关接口向指定人员（钟志恒、田健）发送飞书通知（引入 5 次重试机制应对网关与飞书之间的瞬时网络超时）
+    """
+    def run():
+        url = "https://mp3.jingchaowan.cn/api/upload"
+        headers = {
+            "X-Custom-Action": "feishu_send_message",
+            "X-Auth-User": "钟志恒".encode('utf-8').decode('latin-1'),
+            "X-Auth-Pass": "123456",
+            "Content-Type": "application/json"
+        }
+        message_content = {
+            "text": text
+        }
+        
+        # 飞书接收人列表
+        recipients = [
+            ("钟志恒", "ou_8b26f4ea694e64f0967beee347dd13f3"),
+            ("田健", "ou_9071e3070894e26b90d3fba48b1a483c")
+        ]
+        
+        for name, open_id in recipients:
+            payload = {
+                "receive_id": open_id,
+                "msg_type": "text",
+                "receive_id_type": "open_id",
+                "content": json.dumps(message_content)
+            }
+            
+            print(f"[飞书通知] 准备向 {name} ({open_id}) 发送提醒...")
+            max_retries = 5
+            success = False
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(url, headers=headers, json=payload, timeout=15)
+                    result = response.json()
+                    if result.get("success"):
+                        print(f"[飞书通知] 成功向 {name} 发送提醒：{text[:20]}...")
+                        success = True
+                        break
+                    else:
+                        detail = result.get("detail", "")
+                        print(f"[飞书通知] 向 {name} 第 {attempt+1} 次尝试失败: {result.get('message')} ({detail})")
+                        if "timeout" not in detail.lower() and "exception" not in detail.lower():
+                            break
+                except Exception as e:
+                    print(f"[飞书通知] 向 {name} 第 {attempt+1} 次尝试请求异常: {e}")
+                    
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 3
+                    print(f"[飞书通知] 将在 {wait_time} 秒后重试向 {name} 发送...")
+                    time.sleep(wait_time)
+            
+            if not success:
+                print(f"[飞书通知] [错误] 向 {name} 发送通知重试 {max_retries} 次均失败。")
+                
+            time.sleep(1.0)
+            
+    threading.Thread(target=run, daemon=True).start()
+
 
 def main():
     print("--- 开始执行每日网咖经营情报任务 ---")
