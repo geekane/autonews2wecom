@@ -435,8 +435,8 @@ def main():
     
     save_report_via_worker(report_content)
 
-    # 发送飞书通知：test_mode=True 先只发给钟志恒测试，确认效果后改为 False
-    send_feishu_notification(report_content, test_mode=True)
+    # 发送飞书通知：发给钟志恒 + 田健
+    send_feishu_notification(report_content, test_mode=False)
     
     print("\n--- 任务执行完毕 ---")
 
