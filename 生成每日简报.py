@@ -284,10 +284,8 @@ def _format_report_for_feishu(report_content):
     
     text = report_content
     
-    # 去除 Markdown 链接 [text](url) → text
-    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
-    # 去除孤立 URL（纯 http/https 链接）
-    text = re.sub(r'https?://\S+', '', text)
+    # Markdown 链接 [text](url) → text: url（Feishu 文本消息中完整 URL 会自动变为可点击）
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\1: \2', text)
     # 去除加粗/斜体标记
     text = text.replace('**', '')
     text = re.sub(r'(?<!\*)\*(?!\*)', '', text)
