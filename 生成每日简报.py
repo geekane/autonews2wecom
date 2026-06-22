@@ -23,7 +23,7 @@ TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 # ==========================================
 CUSTOM_LLM_API_KEY = os.environ.get("GEMINI_LLM_API_KEY") 
 CUSTOM_LLM_MODEL_ID = "gemini-3.1-flash-lite" 
-CUSTOM_LLM_BASE_URL = "https://gemini.jingchaowan.cn/v1"
+CUSTOM_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 
 # ==========================================
 # 2. API 端点定义
