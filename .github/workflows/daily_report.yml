@@ -2,8 +2,8 @@ name: 生成并发送行业日报
 
 on:
   schedule:
-    # 每天 UTC 23:00 = 北京时间早上 7:00
-    - cron: '0 23 * * *'
+    # 每天 UTC 22:00 = 北京时间早上 6:00
+    - cron: '0 22 * * *'
   workflow_dispatch: # 允许手动触发
 
 jobs:
