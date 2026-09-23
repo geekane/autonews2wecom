@@ -47,99 +47,65 @@ if not all([SILICONFLOW_API_KEY, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_APP_TO
     # sys.exit(1) # 可选：如果缺失则停止运行
 
 # ==============================================================================
-# --- 基础配置 ---
+# --- 基础配置（已同步更新至 Edge 153 指纹）---
 # ==============================================================================
 DOWNLOAD_DIR = "douyin_downloads"
-# 更新 User-Agent 以匹配最新请求 (Chrome 141)
-BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0'
+# 同步更新 User-Agent 以匹配抓包参数中的 Edge 153.0.0.0
+BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0'
 BASE_URL = "https://www.douyin.com"
 
 # ==============================================================================
-# --- API 硬编码配置 (已更新 Cookie) ---
+# --- API 硬编码配置（全量对齐最新抓包参数）---
 # ==============================================================================
 load_dotenv()
 
-# 注意：如果后续依然报错，可能需要更新 URL 中的 msToken 和 a_bogus 参数，或者使用 Selenium 动态获取
 NEW_URL_TEMPLATE = (
-    "https://www.douyin.com/aweme/v1/web/aweme/post/?device_platform=webapp&aid=6383&channel=channel_pc_web"
-    "&sec_user_id={sec_user_id}&max_cursor={max_cursor}&locate_query=false&show_live_replay_strategy=1"
-    "&need_time_list=1&time_list_query=0&whale_cut_token=&cut_version=1&count=18&publish_video_strategy_type=2"
-    "&from_user_page=1&update_version_code=170400&pc_client_type=1&pc_libra_divert=Windows&support_h265=0"
-    "&support_dash=1&cpu_core_num=8&version_code=290100&version_name=29.1.0&cookie_enabled=true"
-    "&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=Win32&browser_name=Edge"
-    "&browser_version=141.0.0.0&browser_online=true&engine_name=Blink&engine_version=141.0.0.0"
-    "&os_name=Windows&os_version=10&device_memory=8&platform=PC&downlink=10&effective_type=4g"
-    "&round_trip_time=50"
-    # 这里通常建议留空或使用通用 token，具体能否通过取决于 Cookie 的有效性
-    "&webid=7565134208906085938" 
-    "&msToken=L6dVJ6JafprGcw7wSXUxP5FQAZplCVND2wyeHIzoCK-UnT8c0I6ahMFR38RkLjel70cwUogwe6Rv4iSzE0Om5SO-ppYTnQ-T2ERa5Sb_C9gH4wjeC-gubm617d8U1le74nXi-CYQqZWdB_MG6sh0366cBQMINITsQZFRtSyu_Gr-Wg%3D%3D"
-    "&a_bogus=Q60RDwU7m25RFd%2FS8Knc9volgH2MNsuyLri%2FWxCTSxugOZeOPRN0FNbprootmEo%2FNWBhwq37FdllbDVcstUsZ9HkzmpfSOXbkUVCIWsoM1wfTtzQgH8sez4FowMx05Gqa%2FVUilg6%2FUtq6fxAhHQE%2Fd5ry%2FKe5b8BB1xWk2YbT9s610gAEZnePpSDOwTYUyAt"
-)
-
-# 新 Cookie 字符串 (2026-09-04 更新，有效期至 2026-11-03)
-NEW_COOKIE = (
-    # --- 新增：防爬与安全校验核心参数 ---
-    "__ac_nonce=06ab3361d00514172bdab; "
-    "__ac_signature=_02B4Z6wo00f01TKPy.gAAIDCZE-SdtGrMCkyr89AACYT8a; "
-    "__security_mc_1_s_sdk_cert_key=9c0abeae-4ebd-b3c9; "
-    "__security_mc_1_s_sdk_crypt_sdk=bb2e79ad-4a1b-b235; "
-    "__security_mc_1_s_sdk_sign_data_key_web_protect=dbad48f6-4af7-bfc4; "
-    "__security_server_data_status=1; "
-    "_bd_ticket_crypt_cookie=e98d3911e9c2d94c62ffef65c5e7fcbf; "
-    "bd_sso_hi3jfd=mu9zcPVXveDHufG0A%2BqWJQe6hguF17RzdPkHGHTmAws%3D; "
-    "bd_ticket_guard_client_data=eyJiZC10aWNrZXQtZ3VhcmQtdmVyc2lvbiI6MiwiYmQtdGlja2V0LWd1YXJkLWl0ZXJhdGlvbi12ZXJzaW9uIjoxLCJiZC10aWNrZXQtZ3VhcmQtcmVlLXB1YmxpYy1rZXkiOiJCRm1wNUY5aGdnd2dmQ0h2cStuRStOQW5qdkJwMTZ4OUorZFdGU1g4VTFGY2dubHlQR3lBYlg5Tmt4dTFSOUxZa1NGN0dGeTdPN2hrZ1pnaWZYTmlNZHM9IiwiYmQtdGlja2V0LWd1YXJkLXdlYi12ZXJzaW9uIjoyfQ%3D%3D; "
-    "bd_ticket_guard_client_web_domain=2; "
-    "bd_ticket_guard_regenerate_keys_time=2026-09-23/10:15:00; "
-    "bit_env=1q6Xh5fxd7TgSKhKTnXA8DTfUIjc3FbnOT9I5iWKzy6OvSVBOP0Txs_pEG2a5jtyWuE678knXgHz86McPyLWgy_Zg6BVFZFYMxfh5VI2oDxQSNR7zM6CnSZl7IvnP4G1Zdq-ygMR6Y5IThqDoKrgXtxX2QYiuLqstq42Pd_Haf8lYrjhF-Zt1_t95PfJUxRwjApa3kQR7M1WzdKLzWEekb7DXMnEwrYWtMfvCDU3dF0E0usi71J7rUPLtkvvaXwQOHgJhqTUi3Hzf2MCy_BTXTbsMMfhq8WFYXN8uKQClX9hPbRQpngfzx3GWaUDEJS9wcRjs0c5D04UbNr1CTVkLzgFvxewmeUsoX0LaKjV1qA7W5iYgRkaqrjHHYIlvMzkECRaemhcU-sFeHBY1uEsTNSfrN8tHewrRQ2KD0PXEvLdyrL5PmNgRYjjvTZGOZATGo3ZGeMmVdk3UGLpQgcuw8RejKU-1gfUPZziuyVQRDvBd1iD1cmlMLG91wy6-F4S40gGhEsReC_H8AuvgiUZDntHjiX5jllH0L7sWY5wjXg%3D; "
-    "gulu_source_res=eyJwX2luIjoiMDc0ZDJhYWYwZWQzZTE0NWNjYjZlZWVkZTcwNjUxMDVmOWE3Y2NlMzgwODZkODFmMDI3NzFlNmUxYzJiZjdlNSJ9; "
-    "fpk1=U2FsdGVkX19e+g1GvVYvmFIrfnYTr8qPDW5SLV3yEOwA4HPCesvYyI+CW1XOS6C1kCq9ARgxi+uwnFoYNkcgng==; "
-    "fpk2=a654d5eda172d96fed0476f4130cfab1; "
-    # --- 新增：设备指纹与客户端参数 ---
-    "architecture=amd64; "
-    "device_web_cpu_core=12; "
-    "device_web_memory_size=32; "
-    "dy_sheight=1080; "
-    "dy_swidth=1920; "
-    # --- 新增：业务链路与页面标记 ---
-    "biz_trace_id=6e11c62b; "
-    "download_guide=%222%2F20260923%2F0%22; "
-    "enter_pc_once=1; "
-    "FOLLOW_LIVE_POINT_INFO=%22MS4wLjABAAAA91OhU6CY-3l9vrXp4zfWCJk9elYyGeXyduNh44_fhV8%2F1790179200000%2F0%2F1790129757548%2F0%22; "
-    "has_biz_token=false; "
-    "home_can_add_dy_2_desktop=%221%22; "
-    # --- 原有字段（保持一致 / 基础状态）---
-    "is_dash_user=1; "
-    "is_dbsc=false; "
-    "is_staff_user=false; "
-    "is_support_rtm_web_ts=1; "
-    "IsDouyinActive=true; "
-    # --- 原有字段（核心登录态与通信 Token，完整保留）---
-    "login_time=1788507418282; "
-    "n_mh=qheQFbah7hHshwNE2PNtjdisyGC4FcUrNDEFrG1EbjY; "
-    "odin_tt=5bacda5b280e83091aad2f2bea69c8af65e035e082fd5ce69b00d294c270b85e648d7635cbcdff507ab78d2be6c93318033f9564c2a5c6aa1cc187cd294893f2; "
-    "passport_assist_user=Cj1M6BJgV_1NYuZXZSJuyg0wefQzmFce5QEI3oxAovLMVXm6FrWjFwLeyJNmF-3rMIlIZJa2kQYVniKfWCDVGkoKPAAAAAAAAAAAAABQ3P0xLffN74HU1ZQmiKgccHD9Wp97jNOKLavI8dCH0EzTZn9gKlZmysQxMu6QJVS6qRCNrZsOGImv1lQgASIBA69k1Ag%3D; "
-    "passport_csrf_token=49debd8961b30991c7fa6dabf31de56e; "
-    "passport_csrf_token_default=49debd8961b30991c7fa6dabf31de56e; "
-    "publish_badge_show_info=%220%2C0%2C0%2C1788507425741%22; "
-    "s_v_web_id=verify_mtk8iyc6_feiEeUMV_vrfl_4ovk_ACgt_w1bXWFoGUyqr; "
-    "sdk_source_info=7e276470716a68645a606960273f276364697660272927676c715a6d6069756077273f2771777060272927666d776a68605a607d71606b766c6a6b5a7666776c7571273f275e58272927666a6b766a69605a696c6061273f27636469766027292762696a6764695a7364776c6467696076273f275e582729277672715a646971273f2763646976602729277f6b5a666475273f2763646976602729276d6a6e5a6b6a716c273f2763646976602729276c6b6f5a7f6367273f27636469766027292771273f27373334303d363235303d3d3234272927676c715a75776a716a666a69273f2763646976602778; "
-    "SelfTabRedDotControl=%5B%7B%22id%22%3A%227612897050258049067%22%2C%22u%22%3A8%2C%22c%22%3A0%7D%5D; "
-    "session_tlb_tag=sttt%7C19%7CAN1uWs3HeYg_9YGuBzdljf________-lNiQWBpdujmD6SrM0tIPPLPKVN2fZNgXxxZ5ZKVqgpiA%3D; "
-    "sessionid=00dd6e5acdc779883ff581ae0737658d; "
-    "sessionid_ss=00dd6e5acdc779883ff581ae0737658d; "
-    "sid_guard=00dd6e5acdc779883ff581ae0737658d%7C1788507430%7C5184000%7CTue%2C+03-Nov-2026+07%3A37%3A10+GMT; "
-    "sid_tt=00dd6e5acdc779883ff581ae0737658d; "
-    "sid_ucp_v1=1.0.0-KGQzNDdhNGI2OTg1ZWM4MTkwMzdlN2Q2MjFmOWUzMDNkNzliZTM1ZGYKHwjYtJSl-wIQpurp1AYY7zEgDDCzocDaBTgHQPQHSAQaAmxmIiAwMGRkNmU1YWNkYzc3OTg4M2ZmNTgxYWUwNzM3NjU4ZA; "
-    "ssid_ucp_v1=1.0.0-KGQzNDdhNGI2OTg1ZWM4MTkwMzdlN2Q2MjFmOWUzMDNkNzliZTM1ZGYKHwjYtJSl-wIQpurp1AYY7zEgDDCzocDaBTgHQPQHSAQaAmxmIiAwMGRkNmU1YWNkYzc3OTg4M2ZmNTgxYWUwNzM3NjU4ZA; "
-    "strategyABtestKey=%221788507380.2%22; "
-    "stream_recommend_feed_params=%22%7B%5C%22cookie_enabled%5C%22%3Atrue%2C%5C%22screen_width%5C%22%3A1920%2C%5C%22screen_height%5C%22%3A1080%2C%5C%22browser_online%5C%22%3Atrue%2C%5C%22cpu_core_num%5C%22%3A12%2C%5C%22device_memory%5C%22%3A32%2C%5C%22downlink%5C%22%3A10%2C%5C%22effective_type%5C%22%3A%5C%224g%5C%22%2C%5C%22round_trip_time%5C%22%3A0%7D%22; "
-    "ttwid=1%7C_g-_2vr_yJ5lneabL3nK1Jt29iEKXML8GmL6CBvTqN8%7C1788507396%7C06c5205cf363889d9404b0c4bbd3b1644022a3e3d563c113bf4730ccb8ae0537; "
-    "uid_tt=4cf815bed2c06b78f44d18859a074217; "
-    "uid_tt_ss=4cf815bed2c06b78f44d18859a074217; "
-    "UIFID=d472ac480857dabbef204779db35465080d74766471a275e6c575984c52d48c3d3f2f3787f49401ca5bdda1a06d8a98141b64c0ff6ba611d8d90af818dfef0d9bd01530c342482210f5fe8c2b856c6d59174acc60daaa3c1bdff673fadbdff1da373648fa6174e3fa5be44938e6d1f00ab3a763c8ed517d979da9bd91f155886ebd62ce3f425c258f79cf4c8d054afb8d75ae47c60c19a237aaed7b8b9cbac8e; "
-    "UIFID_TEMP=d472ac480857dabbef204779db35465080d74766471a275e6c575984c52d48c37664c35577c2deec0babaaae8fee585788cb0a21e9577fbebf12ad9534a6be4288042582c487149135a3bcb26f18906c; "
-    "volume_info=%7B%22isUserMute%22%3Afalse%2C%22isMute%22%3Afalse%2C%22volume%22%3A0.711%7D; "
-    "x_tt_token=0000dd6e5acdc779883ff581ae0737658d0573522474e06fac44592435a5d90a1f5588bdcec6970624bd7f10f203384e3fbb0a40c351636438762339867b7076d9230931c8cb0ac88df0baf926ada1fbfb23bf2b5f16d374a721dc0d521e0e5ea7086--0a490a20fae3db61b9eea4c4be8154485d2941d39b62fc9eb59232e41740773421a70ed2122039e518baadcec4421ecf4b263dc37acf136485471794d97426be9383ecedf08818f6b4d309-3.0.4"
+    "https://www.douyin.com/aweme/v1/web/aweme/post/?"
+    "device_platform=webapp"
+    "&aid=6383"
+    "&channel=channel_pc_web"
+    "&sec_user_id={sec_user_id}"
+    "&max_cursor={max_cursor}"
+    "&locate_query=false"
+    "&show_live_replay_strategy=1"
+    "&need_time_list=1"
+    "&time_list_query=0"
+    "&whale_cut_token="
+    "&cut_version=1"
+    "&count=18"
+    "&publish_video_strategy_type=2"
+    "&from_user_page=1"
+    "&update_version_code=170400"
+    "&pc_client_type=1"
+    "&pc_libra_divert=Windows"
+    "&support_h265=0"
+    "&support_dash=1"
+    "&cpu_core_num=12"
+    "&version_code=290100"
+    "&version_name=29.1.0"
+    "&cookie_enabled=true"
+    "&screen_width=1920"
+    "&screen_height=1080"
+    "&browser_language=zh-CN"
+    "&browser_platform=Win32"
+    "&browser_name=Edge"
+    "&browser_version=153.0.0.0"
+    "&browser_online=true"
+    "&engine_name=Blink"
+    "&engine_version=153.0.0.0"
+    "&os_name=Windows"
+    "&os_version=10"
+    "&device_memory=32"
+    "&platform=PC"
+    "&downlink=10"
+    "&effective_type=4g"
+    "&round_trip_time=0"
+    "&webid=7687924326851266111"
+    "&uifid=8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fecfd74a49fbc4b4910fe525d6e59c7d1ed04ec3d996cba72cef3fc60d07f5ff6e4c7074d00374568e4985f86cd64d954cacc48479271b025dac4bfe65dca42764b67e536114a7d70e296019bfb89d03ed081b754120fc101808668db14b85d016025d4da52ab36bc9a27f3b6026228ceb6950228c69c0dbe37205402f552ab44c4"
+    "&msToken=XLMtZ-1QQ-qWkAm09y4Q1-IGV8YipkjJdg94XuQXdMw0FDtjGQybBKkpJRW9jMy2iL2FCnScBzt-5hIlvNChWxZjKGMfWpl6dVQGlY8oK5yJeoZ7cXWM-YNmPRI_GF5SNuwHy1YF5ddkJin5iXE_Ru7yoi2QxxjlEgFe8WzG_kib"
+    "&a_bogus=Y6sRkq6JDqRnCd%2FS8cDyH1BUXgIANsSyZBTdbTOTtxTcyqlYJSNbTNS9GoFB3rYc0YBshCA7lVzAbEVbpUUspeepqmZkS8kRMGVc908oZqwDGFtsErjZCzkzowBxUR4qa%2FVJiIDIgUtogVVAwHdL%2Fd5re%2FKe5RuBM3OykZYbP9sh10LAg3cePQGkYXpPUVdf"
+    "&verifyFp=verify_mudh01t1_h07pN9qI_Tkwn_4m3J_B6Cs_NkzxVZZVmVB2"
+    "&fp=verify_mudh01t1_h07pN9qI_Tkwn_4m3J_B6Cs_NkzxVZZVmVB2"
 )
 
 API_CONFIG = {
@@ -149,15 +115,18 @@ API_CONFIG = {
         'cache-control': 'no-cache',
         'pragma': 'no-cache',
         'priority': 'u=1, i',
-        'referer': 'https://www.douyin.com/', 
-        'sec-ch-ua': '"Microsoft Edge";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',
+        'referer': 'https://www.douyin.com/',
+        # 同步更新为 Edge 153
+        'sec-ch-ua': '"Microsoft Edge";v="153", "Not?A_Brand";v="8", "Chromium";v="153"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
         'sec-fetch-dest': 'empty',
         'sec-fetch-mode': 'cors',
         'sec-fetch-site': 'same-origin',
         'user-agent': BROWSER_USER_AGENT,
-        # 优先读取环境变量，如果没有则使用 hardcoded 的 NEW_COOKIE
+        # 新增抓包中包含的风控签名请求头
+        'x-secsdk-web-signature': '2fdbe5bc6d1007ed308de94b2ac4191f',
+        # 优先读取环境变量，如果没有则使用 NEW_COOKIE
         'cookie': os.getenv("DOUYIN_COOKIE", NEW_COOKIE)
     },
     "url_template": NEW_URL_TEMPLATE
