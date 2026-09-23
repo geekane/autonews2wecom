@@ -46,6 +46,13 @@ if not all([SILICONFLOW_API_KEY, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_APP_TO
     print("错误: 缺失必要的环境变量配置，请检查 GitHub Secrets 设置。")
 
 # ==============================================================================
+# --- 基础配置 ---
+# ==============================================================================
+DOWNLOAD_DIR = "douyin_downloads"
+BASE_URL = "https://www.douyin.com"
+BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0'
+
+# ==============================================================================
 # --- API 配置（基于最新 curl 全量对齐：包含独立域名、风控头与完整会话 Cookie）---
 # ==============================================================================
 load_dotenv()
