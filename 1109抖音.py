@@ -7,13 +7,14 @@ import re
 import requests
 import time
 import argparse
+import urllib.parse
+from urllib.parse import urlparse, parse_qs, quote, urlencode
 import pandas as pd
 import ffmpeg
 from dotenv import load_dotenv
 from datetime import datetime
 import subprocess
 from typing import Dict, Any, Optional, List
-from urllib.parse import urlparse, parse_qs
 
 # URL提取函数
 def extract_douyin_url(input_text):
@@ -33,17 +34,32 @@ if hasattr(sys.stdout, 'buffer'):
         print(f"Warning: Failed to reconfigure stdout/stderr encoding: {e}")
 
 # ==============================================================================
+# --- 引入 a_bogus v20 纯算法实现（优先本地当前目录，回退 E 盘）---
+# ==============================================================================
+try:
+    import abogus_v20
+except ImportError:
+    for extra_dir in [os.path.dirname(os.path.abspath(__file__)), r"E:\0930douyinpinglin"]:
+        if os.path.exists(extra_dir) and extra_dir not in sys.path:
+            sys.path.insert(0, extra_dir)
+    try:
+        import abogus_v20
+    except Exception as _err:
+        print(f"⚠️ [警告] 加载 abogus_v20 失败: {_err}，请确保已安装 gmssl 依赖")
+        abogus_v20 = None
+
+# ==============================================================================
 # --- 核心配置 ---
 # ==============================================================================
-SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY")
-FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
-FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
-FEISHU_APP_TOKEN = os.getenv("FEISHU_APP_TOKEN")
-FEISHU_TABLE_ID = os.getenv("FEISHU_TABLE_ID")
+SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", "")
+FEISHU_APP_ID = os.getenv("FEISHU_APP_ID", "cli_a6672cae343ad00e")
+FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET", "0J4SpfBMeIxJEOXDJMNbofMipRgwkMpV")
+FEISHU_APP_TOKEN = os.getenv("FEISHU_APP_TOKEN", "BJ2gbK1onahpjZsglTgcxo7Onif")
+FEISHU_TABLE_ID = os.getenv("FEISHU_TABLE_ID", "tbliEUHB9iSxZuiY")
 
 # 检查必要变量是否存在
-if not all([SILICONFLOW_API_KEY, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_APP_TOKEN, FEISHU_TABLE_ID]):
-    print("错误: 缺失必要的环境变量配置，请检查 GitHub Secrets 设置。")
+if not all([FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_APP_TOKEN]):
+    print("提示: 未配置完整飞书环境变量，将使用默认配置。")
 
 # ==============================================================================
 # --- 基础配置 ---
@@ -53,143 +69,187 @@ BASE_URL = "https://www.douyin.com"
 BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0'
 
 # ==============================================================================
-# --- API 配置（基于最新 curl 全量对齐：包含独立域名、风控头与完整会话 Cookie）---
+# --- 动态 Cookie 池与防 403 签名引擎 ---
 # ==============================================================================
 load_dotenv()
 
-# 基础浏览器 User-Agent
-BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0'
-
-# 1. 最新 URL 模板（对齐 www-hj 域名与全新签名参数）
-NEW_URL_TEMPLATE = (
-    "https://www-hj.douyin.com/aweme/v1/web/aweme/post/?"
-    "device_platform=webapp"
-    "&aid=6383"
-    "&channel=channel_pc_web"
-    "&sec_user_id={sec_user_id}"
-    "&max_cursor={max_cursor}"
-    "&locate_item_id=7524995207487720763"
-    "&locate_query=false"
-    "&show_live_replay_strategy=1"
-    "&need_time_list=0"
-    "&time_list_query=0"
-    "&whale_cut_token="
-    "&cut_version=1"
-    "&count=18"
-    "&publish_video_strategy_type=2"
-    "&from_user_page=1"
-    "&update_version_code=170400"
-    "&pc_client_type=1"
-    "&pc_libra_divert=Windows"
-    "&support_h265=0"
-    "&support_dash=1"
-    "&cpu_core_num=12"
-    "&version_code=290100"
-    "&version_name=29.1.0"
-    "&cookie_enabled=true"
-    "&screen_width=1920"
-    "&screen_height=1080"
-    "&browser_language=zh-CN"
-    "&browser_platform=Win32"
-    "&browser_name=Edge"
-    "&browser_version=153.0.0.0"
-    "&browser_online=true"
-    "&engine_name=Blink"
-    "&engine_version=153.0.0.0"
-    "&os_name=Windows"
-    "&os_version=10"
-    "&device_memory=32"
-    "&platform=PC"
-    "&downlink=1.45"
-    "&effective_type=3g"
-    "&round_trip_time=450"
-    "&webid=7687924326851266111"
-    "&uifid=8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fecfd74a49fbc4b4910fe525d6e59c7d1ed04ec3d996cba72cef3fc60d07f5ff6e4c7074d00374568e4985f86cd64d954cacc48479271b025dac4bfe65dca42764b67e536114a7d70e296019bfb89d03ed081b754120fc101808668db14b85d016025d4da52ab36bc9a27f3b6026228ceb6950228c69c0dbe37205402f552ab44c4"
-    "&msToken=RtLi67NcZCU90row7KnmLi7ct0a4O_OE2R3-OvFpTDKobbVNIigUZPsISrUb_ZyuXxm21mFf-pcaekBwLiDMGMuWpFS34plxLztqgAXsA7CFMFDP18Vd6RTN3QGG4qBw_9KHdZlajQfJHn8OHLyAbzz3LDcyPy2XRDCRRBkslH_o5GIjT49-xw%3D%3D"
-    "&a_bogus=dfsVgHt7mN%2FbPdFtmCveHAdUeu9ArsSyrPiKbrrPSxYkLhMTvRNysPSpGozEsVWW0bBwh9V77VUAYDncp4UkpeCpomZkSLTfMt599gfLgqNfTztsEqbFCugFowsN0b4q-AV7ilg60Uto6jVAhrdY%2FplJy%2FuFQcWBPpOSkMYbE9shZFgAg3n3PQtZxwiqjD%3D%3D"
-    "&verifyFp=verify_mudh01t1_h07pN9qI_Tkwn_4m3J_B6Cs_NkzxVZZVmVB2"
-    "&fp=verify_mudh01t1_h07pN9qI_Tkwn_4m3J_B6Cs_NkzxVZZVmVB2"
-    "&timestamp=1790131221"
-    "&x-secsdk-web-signature=36450b11240e76d5510bff300d2e404a"
-)
-
-# 2. 与当前抓包同会话的最新 Cookie（已配对 verifyFp 与 s_v_web_id）
-NEW_COOKIE = (
+# 内置兜底备用 Cookie
+DEFAULT_BACKUP_COOKIE = (
     "s_v_web_id=verify_mudh01t1_h07pN9qI_Tkwn_4m3J_B6Cs_NkzxVZZVmVB2; "
     "passport_csrf_token=5c0076574bf79c59609a661d6630d319; "
     "passport_csrf_token_default=5c0076574bf79c59609a661d6630d319; "
     "enter_pc_once=1; "
-    "UIFID_TEMP=8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fec657241762453014ce48570a5e878094aa6becbb38fb55ac72585082c82326d704cd9c479f8dc113112d92aa51b3c14bb; "
-    "is_support_rtm_web_ts=1; "
-    "strategyABtestKey=%221790129696.427%22; "
-    "is_dash_user=1; "
-    "volume_info=%7B%22isUserMute%22%3Afalse%2C%22isMute%22%3Afalse%2C%22volume%22%3A0.5%7D; "
     "ttwid=1%7CR8ojIxy17ufBcgFO7YxUHGjFRpQO1g-pzO2tUah3lNs%7C1790129700%7C6bd6140e50994398f43e9a56922e00c0a37ca65e6fca00421718d5e6a1a47842; "
-    "bd_ticket_guard_regenerate_keys_time=2026-09-23/10:15:00; "
-    "bd_ticket_guard_client_web_domain=2; "
-    "passport_assist_user=Cjw0P8GNsW0B7EYyuUC8X4d8Kai-7cVm5sigTQOZ7P1CFQrftgpqZ4BsTdo3E6dsbIb3BGb3XnaAADIMbdoaSgo8AAAAAAAAAAAAAFDvqUsrRmnOw_mguzxg2yBBg3VE9eulfLlnSudC5Z5wzX46zLxGxeqJC-VwaTFHlrYqEOWAnQ4Yia_WVCABIgEDXw9J1g%3D%3D; "
-    "n_mh=qheQFbah7hHshwNE2PNtjdisyGC4FcUrNDEFrG1EbjY; "
-    "sid_guard=656e76c91082efe121cf57b0380843d0%7C1790129754%7C5184000%7CSun%2C+22-Nov-2026+02%3A15%3A54+GMT; "
-    "uid_tt=513bbb0a497f4d8d884bcec9f9994e98; "
-    "uid_tt_ss=513bbb0a497f4d8d884bcec9f9994e98; "
-    "sid_tt=656e76c91082efe121cf57b0380843d0; "
     "sessionid=656e76c91082efe121cf57b0380843d0; "
-    "sessionid_ss=656e76c91082efe121cf57b0380843d0; "
-    "session_tlb_tag=sttt%7C18%7CZW52yRCC7-Ehz1ewOAhD0P_________8UpXynfkqBjG5X7pKAGS0BUizIN5M1c1SHWCE_3LIbYE%3D; "
-    "is_staff_user=false; "
-    "has_biz_token=false; "
-    "sid_ucp_v1=1.0.0-KGViM2M4M2MwMjk1ZGQ3NTczZWE1MTBmYWJjMzQ1Mzg0ZDcwMDI5YTUKHwibstH8mgIQ2uzM1QYY7zEgDDDMjrDQBTgHQPQHSAQaAmxmIiA2NTZlNzZjOTEwODJlZmUxMjFjZjU3YjAzODA4NDNkMA; "
-    "ssid_ucp_v1=1.0.0-KGViM2M4M2MwMjk1ZGQ3NTczZWE1MTBmYWJjMzQ1Mzg0ZDcwMDI5YTUKHwibstH8mgIQ2uzM1QYY7zEgDDDMjrDQBTgHQPQHSAQaAmxmIiA2NTZlNzZjOTEwODJlZmUxMjFjZjU3YjAzODA4NDNkMA; "
-    "is_dbsc=false; "
-    "x_tt_token=00656e76c91082efe121cf57b0380843d003c10e56887ae5cdbb9fac1daff3c69ed6ac1e48afd3f687d6673c6e64f42a25cf8f4328ca353a3fb7b698d45ae5ab6d8023dcd2d814d6ccb59fa3bf8e967a2535f85bd6411c7609e6efaea57bb4be34e4b--0a490a20bb06d3047f158bdbbec5e24c6890ddc32404780c82fa78b887b6c99d464d57491220f04dfe3461fb2947b485f28e10a4fec0e016a05acd1ab9d94f116a71278e3db118f6b4d309-3.0.4; "
-    "login_time=1790129754020; "
-    "UIFID=8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fecfd74a49fbc4b4910fe525d6e59c7d1ed04ec3d996cba72cef3fc60d07f5ff6e4c7074d00374568e4985f86cd64d954cacc48479271b025dac4bfe65dca42764b67e536114a7d70e296019bfb89d03ed081b754120fc101808668db14b85d016025d4da52ab36bc9a27f3b6026228ceb6950228c69c0dbe37205402f552ab44c4; "
-    "SelfTabRedDotControl=%5B%7B%22id%22%3A%227113860477604694023%22%2C%22u%22%3A100%2C%22c%22%3A0%7D%5D; "
-    "_bd_ticket_crypt_cookie=e98d3911e9c2d94c62ffef65c5e7fcbf; "
-    "__security_mc_1_s_sdk_sign_data_key_web_protect=dbad48f6-4af7-bfc4; "
-    "__security_mc_1_s_sdk_cert_key=9c0abeae-4ebd-b3c9; "
-    "__security_mc_1_s_sdk_crypt_sdk=bb2e79ad-4a1b-b235; "
-    "__security_server_data_status=1; "
-    "PhoneResumeUidCacheV1=%7B%2275960178971%22%3A%7B%22time%22%3A1790129757314%2C%22noClick%22%3A1%7D%7D; "
-    "FOLLOW_NUMBER_YELLOW_POINT_INFO=%22MS4wLjABAAAA91OhU6CY-3l9vrXp4zfWCJk9elYyGeXyduNh44_fhV8%2F1790179200000%2F0%2F1790130456480%2F0%22; "
-    "download_guide=%223%2F20260923%2F0%22; "
-    "FOLLOW_LIVE_POINT_INFO=%22MS4wLjABAAAA91OhU6CY-3l9vrXp4zfWCJk9elYyGeXyduNh44_fhV8%2F1790179200000%2F0%2F1790131206654%2F0%22; "
-    "publish_badge_show_info=%220%2C0%2C0%2C1790131212338%22; "
-    "biz_trace_id=80e44477; "
-    "sdk_source_info=7e276470716a68645a606960273f276364697660272927676c715a6d6069756077273f2771777060272927666d776a68605a607d71606b766c6a6b5a7666776c7571273f275e58272927666a6b766a69605a696c6061273f27636469766027292762696a6764695a7364776c6467696076273f275e582729277672715a646971273f2763646976602729277f6b5a666475273f2763646976602729276d6a6e5a6b6a716c273f2763646976602729276c6b6f5a7f6367273f27636469766027292771273f27363433333437343634353c3234272927676c715a75776a716a666a69273f2763646976602778; "
-    "bit_env=JcYoAd-O4ttoF90YRUbrwAXcR_BIz10lxA-_JTdt_KDhG40Upm1tay8DOBQTsstHCZcVsBNd-TmkY7DN56QFnzfJ35PGMvTKncUXrwH40CnX3cFf7D0_3CsKrESGt9VoE0OjvTgQJ2UZqyjGe6C2GiQ-Kxs_9dZdyH0e8MGRlhE-Q6N2kTa2p54uTfZ3STYkNhr0fz0jNIahTakKpLuU3Z-6amgHEn-2oYDn_MoaYjMP39wSz9-XT9Z-pD8J2GFTxaIOG_nIkzPlkvc1BGHx5zdpxF0EClstJvt57FRGy1By7t_t9em8RL0Ow2PWLpbp-U5yOYTquJU7mL57bIdEs8jleVurxBRiYp3RJIodcbLlzBBwsL7F3ycA_ozmjm-kZaWens37uiUVTXUf5kosgzAXUngHLEJVzPQiLtjpYqU0LIw0N23Wx0RHEe8enAK4ckI5h-MiXaxWbOkGJ3TJclxAO3Ft4ItFwJbYP9mMmU3l9Ml9zTHU5tzmf6RZNNZgINK0ktCDDpeNNPMgRJmVfbwN4RBNqxTzAt3goloFVa8%3D; "
-    "gulu_source_res=eyJwX2luIjoiMDc0ZDJhYWYwZWQzZTE0NWNjYjZlZWVkZTcwNjUxMDVmOWE3Y2NlMzgwODZkODFmMDI3NzFlNmUxYzJiZjdlNSJ9; "
-    "passport_auth_mix_state=3od491vq3doaypoj894kf24xipfnqr26; "
-    "IsDouyinActive=true; "
-    "home_can_add_dy_2_desktop=%220%22; "
-    "stream_recommend_feed_params=%22%7B%5C%22cookie_enabled%5C%22%3Atrue%2C%5C%22screen_width%5C%22%3A1920%2C%5C%22screen_height%5C%22%3A1080%2C%5C%22browser_online%5C%22%3Atrue%2C%5C%22cpu_core_num%5C%22%3A12%2C%5C%22device_memory%5C%22%3A32%2C%5C%22downlink%5C%22%3A1.45%2C%5C%22effective_type%5C%22%3A%5C%223g%5C%22%2C%5C%22round_trip_time%5C%22%3A450%7D%22; "
-    "odin_tt=54466c08f0c899749384e8c80fb9ef5e6d41f0163312a1127c22fe6188f4bc77eb940dc862faa4e784ecdf3d717927a9ae4d19462addd8a41533c3d496176a92; "
-    "bd_ticket_guard_client_data=eyJiZC10aWNrZXQtZ3VhcmQtdmVyc2lvbiI6MiwiYmQtdGlja2V0LWd1YXJkLWl0ZXJhdGlvbi12ZXJzaW9uIjoxLCJiZC10aWNrZXQtZ3VhcmQtcmVlLXB1YmxpYy1rZXkiOiJCRm1wNUY5aGdnd2dmQ0h2cStuRStOQW5qdkJwMTZ4OUorZFdGU1g4VTFGY2dubHlQR3lBYlg5Tmt4dTFSOUxZa1NGN0dGeTdPN2hrZ1pnaWZYTmlNZHM9IiwiYmQtdGlja2V0LWd1YXJkLXdlYi12ZXJzaW9uIjoyfQ%3D%3D"
+    "sid_tt=656e76c91082efe121cf57b0380843d0; "
+    "is_dash_user=1; "
+    "UIFID=8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fecfd74a49fbc4b4910fe525d6e59c7d1ed04ec3d996cba72cef3fc60d07f5ff6e4c7074d00374568e4985f86cd64d954cacc48479271b025dac4bfe65dca42764b67e536114a7d70e296019bfb89d03ed081b754120fc101808668db14b85d016025d4da52ab36bc9a27f3b6026228ceb6950228c69c0dbe37205402f552ab44c4"
 )
 
-# 3. 全套对齐请求头（增加 origin, sec-fetch-site, uifid, x-secsdk-web-signature）
-API_CONFIG = {
-    "headers": {
+def parse_cookie_to_dict(cookie_str: str) -> Dict[str, str]:
+    """将 Cookie 字符串快速拆分为键值字典"""
+    res = {}
+    if not cookie_str:
+        return res
+    for part in cookie_str.split(";"):
+        part = part.strip()
+        if "=" in part:
+            k, v = part.split("=", 1)
+            res[k.strip()] = v.strip()
+    return res
+
+def load_douyin_cookies() -> List[str]:
+    """
+    动态加载候选 Cookie 池（按优先级排序）：
+    1. 环境变量 DOUYIN_COOKIE
+    2. 本地 server-config.douyin.json（涵盖三账号实时 Cookie）
+    3. E:\\0930douyinpinglin\\credentials.py
+    4. 默认内置 Cookie
+    """
+    pool = []
+
+    # 1. 环境变量
+    env_c = os.getenv("DOUYIN_COOKIE", "").strip()
+    if env_c and len(env_c) > 30:
+        pool.append(env_c)
+
+    # 2. 读取同目录 server-config.douyin.json
+    cfg_paths = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "server-config.douyin.json"),
+        os.path.join(os.getcwd(), "server-config.douyin.json")
+    ]
+    for p in cfg_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    cfg_json = json.load(f)
+                    for acc in ["account1", "account2", "account3"]:
+                        acc_data = cfg_json.get(acc, {})
+                        c = acc_data.get("cookie", "").strip()
+                        if c and len(c) > 30 and c not in pool:
+                            pool.append(c)
+            except Exception as e:
+                print(f"[Cookie池] 读取 {p} 异常: {e}")
+            break
+
+    # 3. 读取 E:\0930douyinpinglin\credentials.py (若存在)
+    cred_file = r"E:\0930douyinpinglin\credentials.py"
+    if os.path.exists(cred_file):
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("ext_cred", cred_file)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            if hasattr(mod, "COOKIES") and isinstance(mod.COOKIES, dict):
+                c_str = "; ".join(f"{k}={v}" for k, v in mod.COOKIES.items())
+                if c_str and len(c_str) > 30 and c_str not in pool:
+                    pool.append(c_str)
+        except Exception:
+            pass
+
+    # 4. 保底 Cookie
+    if not pool:
+        pool.append(DEFAULT_BACKUP_COOKIE)
+
+    return pool
+
+def get_api_headers(cookie_str: str, referer: str = "https://www.douyin.com/") -> Dict[str, str]:
+    """生成带有当前有效 Cookie 的完整仿真请求头"""
+    c_dict = parse_cookie_to_dict(cookie_str)
+    uifid = c_dict.get("UIFID") or c_dict.get("UIFID_TEMP") or "8a94356f87650fa0412c61e664858f58"
+    return {
         'accept': 'application/json, text/plain, */*',
-        'accept-language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,zh-TW;q=0.6',
+        'accept-language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
         'cache-control': 'no-cache',
         'origin': 'https://www.douyin.com',
         'pragma': 'no-cache',
         'priority': 'u=1, i',
-        'referer': 'https://www.douyin.com/',
+        'referer': referer,
         'sec-ch-ua': '"Microsoft Edge";v="153", "Not_A Brand";v="8", "Chromium";v="153"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
         'sec-fetch-dest': 'empty',
         'sec-fetch-mode': 'cors',
         'sec-fetch-site': 'same-site',
-        'uifid': '8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fecfd74a49fbc4b4910fe525d6e59c7d1ed04ec3d996cba72cef3fc60d07f5ff6e4c7074d00374568e4985f86cd64d954cacc48479271b025dac4bfe65dca42764b67e536114a7d70e296019bfb89d03ed081b754120fc101808668db14b85d016025d4da52ab36bc9a27f3b6026228ceb6950228c69c0dbe37205402f552ab44c4',
+        'uifid': uifid,
         'user-agent': BROWSER_USER_AGENT,
-        'x-secsdk-web-signature': '36450b11240e76d5510bff300d2e404a',
-        'cookie': os.getenv("DOUYIN_COOKIE", NEW_COOKIE)
-    },
-    "url_template": NEW_URL_TEMPLATE
-}
+        'cookie': cookie_str
+    }
+
+def build_signed_aweme_post_url(sec_user_id: str, max_cursor: Any, cookie_str: str, domain: str = "www.douyin.com") -> str:
+    """
+    ★ 核心：纯算法实时计算当前时间戳与 a_bogus，绝无静态硬编码，彻底根治隔天 403
+    """
+    c_dict = parse_cookie_to_dict(cookie_str)
+    cur_ts = str(int(time.time()))
+    verify_fp = c_dict.get("s_v_web_id") or "verify_mudh01t1_h07pN9qI_Tkwn_4m3J_B6Cs_NkzxVZZVmVB2"
+    webid = c_dict.get("webid") or "7687924326851266111"
+    uifid = c_dict.get("UIFID") or c_dict.get("UIFID_TEMP") or ""
+    ms_token = c_dict.get("msToken") or ""
+
+    params = [
+        ("device_platform", "webapp"),
+        ("aid", "6383"),
+        ("channel", "channel_pc_web"),
+        ("sec_user_id", str(sec_user_id)),
+        ("max_cursor", str(max_cursor)),
+        ("locate_item_id", "7524995207487720763"),
+        ("locate_query", "false"),
+        ("show_live_replay_strategy", "1"),
+        ("need_time_list", "0"),
+        ("time_list_query", "0"),
+        ("whale_cut_token", ""),
+        ("cut_version", "1"),
+        ("count", "18"),
+        ("publish_video_strategy_type", "2"),
+        ("from_user_page", "1"),
+        ("update_version_code", "170400"),
+        ("pc_client_type", "1"),
+        ("pc_libra_divert", "Windows"),
+        ("support_h265", "0"),
+        ("support_dash", "1"),
+        ("cpu_core_num", "12"),
+        ("version_code", "290100"),
+        ("version_name", "29.1.0"),
+        ("cookie_enabled", "true"),
+        ("screen_width", "1920"),
+        ("screen_height", "1080"),
+        ("browser_language", "zh-CN"),
+        ("browser_platform", "Win32"),
+        ("browser_name", "Edge"),
+        ("browser_version", "153.0.0.0"),
+        ("browser_online", "true"),
+        ("engine_name", "Blink"),
+        ("engine_version", "153.0.0.0"),
+        ("os_name", "Windows"),
+        ("os_version", "10"),
+        ("device_memory", "32"),
+        ("platform", "PC"),
+        ("downlink", "1.45"),
+        ("effective_type", "3g"),
+        ("round_trip_time", "450"),
+        ("webid", webid),
+        ("uifid", uifid),
+        ("msToken", ms_token),
+        ("verifyFp", verify_fp),
+        ("fp", verify_fp),
+        ("timestamp", cur_ts),
+    ]
+
+    query_str = urllib.parse.urlencode(params)
+    base_url = f"https://{domain}/aweme/v1/web/aweme/post/"
+
+    if abogus_v20 and hasattr(abogus_v20, "encrypt"):
+        try:
+            a_bogus = abogus_v20.encrypt(BROWSER_USER_AGENT, query_str, "")
+            quoted_ab = urllib.parse.quote(a_bogus, safe="")
+            return f"{base_url}?{query_str}&a_bogus={quoted_ab}"
+        except Exception as e:
+            print(f"⚠️ [a_bogus 计算发生异常]: {e}，将尝试原生查询参数")
+            return f"{base_url}?{query_str}"
+    else:
+        print("⚠️ [警告] 未检测到 abogus_v20 模块，将直接发送无签名请求")
+        return f"{base_url}?{query_str}"
 
 # --- 日志记录辅助函数 ---
 def log_message(log_list, message):
@@ -371,20 +431,42 @@ class RequestHandler:
 
     def make_request(self, url: str, headers: Dict) -> Optional[Dict]:
         try:
-            response = self.session.get(url, headers=headers, timeout=10)
+            response = self.session.get(url, headers=headers, timeout=15)
+            if response.status_code == 403:
+                print(f"⚠️ [API 403 拦截] 目标接口返回 403 Forbidden: {url[:75]}...")
+                return {"status_code": 403, "error": "Forbidden"}
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            code = e.response.status_code if e.response is not None else 0
+            print(f"⚠️ 请求API HTTP状态异常 ({code}): {e}")
+            return {"status_code": code, "error": str(e)}
         except requests.exceptions.RequestException as e:
-            print(f"请求API时出错: {e}")
+            print(f"⚠️ 请求API网络异常: {e}")
             return None
         except json.JSONDecodeError as e:
-            print(f"解析JSON时出错: {e}. 响应内容: {response.text[:200]}...")
+            print(f"⚠️ 解析JSON异常: {e}")
             return None
 
 
 class DouyinCrawler:
     def __init__(self):
         self.request_handler = RequestHandler()
+        self.cookie_pool = load_douyin_cookies()
+        self.cookie_idx = 0
+        self.domains = ["www.douyin.com", "www-hj.douyin.com"]
+        print(f"✅ [DouyinCrawler] 初始化完成，已装载 {len(self.cookie_pool)} 组账号 Cookie，动态 a_bogus 算法与双域名容灾已就绪")
+
+    def get_current_cookie(self) -> str:
+        if not self.cookie_pool:
+            return DEFAULT_BACKUP_COOKIE
+        return self.cookie_pool[self.cookie_idx % len(self.cookie_pool)]
+
+    def rotate_cookie(self):
+        """遭遇 403 风控时自动切换下一组 Cookie 避开单账号频控"""
+        if len(self.cookie_pool) > 1:
+            self.cookie_idx = (self.cookie_idx + 1) % len(self.cookie_pool)
+            print(f"🔄 [403风控切换] 自动轮换至第 {self.cookie_idx + 1}/{len(self.cookie_pool)} 组 Cookie 重试")
 
     def get_user_videos(self, user_url: str, max_videos: int = 50) -> Dict[str, Any]:
         sec_user_id = self._extract_sec_user_id(user_url)
@@ -395,14 +477,33 @@ class DouyinCrawler:
         max_cursor = "0"
         
         while len(result["videos"]) < max_videos:
-            request_url = self._build_request_url(sec_user_id, max_cursor)
-            headers = API_CONFIG['headers'].copy()
-            headers['referer'] = user_url
+            response_data = None
+            success = False
 
-            response_data = self.request_handler.make_request(request_url, headers)
+            # 多域名 + 动态 Cookie 轮换重试机制（抗 403 核心）
+            max_attempts = max(3, len(self.cookie_pool) * 2)
+            for attempt in range(max_attempts):
+                domain = self.domains[attempt % len(self.domains)]
+                active_cookie = self.get_current_cookie()
+                
+                # 纯算法实时计算当前时间戳和 a_bogus
+                request_url = build_signed_aweme_post_url(sec_user_id, max_cursor, active_cookie, domain=domain)
+                headers = get_api_headers(active_cookie, referer=user_url)
 
-            if not response_data or response_data.get("status_code") != 0:
-                error_msg = f"API请求失败或状态码不为0。数据: {response_data}"
+                response_data = self.request_handler.make_request(request_url, headers)
+
+                if response_data and response_data.get("status_code") == 0:
+                    success = True
+                    break
+                elif response_data and response_data.get("status_code") == 403:
+                    # 遭遇 403，触发轮换
+                    self.rotate_cookie()
+                    time.sleep(1.2)
+                else:
+                    time.sleep(0.8)
+
+            if not success or not response_data or response_data.get("status_code") != 0:
+                error_msg = f"API请求失败或遭遇风控 403。最后响应: {response_data}"
                 if not result["videos"]:
                     return {"error": error_msg}
                 break
@@ -437,13 +538,15 @@ class DouyinCrawler:
                 return parse_qs(urlparse(user_url).query).get('sec_user_id', [None])[0]
             
             if "v.douyin.com" in user_url:
-                 response = requests.get(user_url, headers={"User-Agent": BROWSER_USER_AGENT}, timeout=10, allow_redirects=True)
-                 response.raise_for_status()
-                 final_url = response.url
-                 if '/user/' in final_url:
-                     match = re.search(r'/user/([a-zA-Z0-9_-]+)', final_url)
-                     if match: return match.group(1)
-                 return parse_qs(urlparse(final_url).query).get('sec_user_id', [None])[0]
+                active_cookie = self.get_current_cookie()
+                headers = get_api_headers(active_cookie, referer="https://www.douyin.com/")
+                response = requests.get(user_url, headers=headers, timeout=10, allow_redirects=True)
+                response.raise_for_status()
+                final_url = response.url
+                if '/user/' in final_url:
+                    match = re.search(r'/user/([a-zA-Z0-9_-]+)', final_url)
+                    if match: return match.group(1)
+                return parse_qs(urlparse(final_url).query).get('sec_user_id', [None])[0]
 
             match = re.search(r'/user/([a-zA-Z0-9_-]+)', user_url)
             if match:
@@ -452,12 +555,6 @@ class DouyinCrawler:
         except Exception as e:
             print(f"提取 sec_user_id 时出错: {e}")
             return None
-
-    def _build_request_url(self, sec_user_id, max_cursor):
-        return API_CONFIG['url_template'].format(
-            sec_user_id=sec_user_id,
-            max_cursor=max_cursor
-        )
 
     def _parse_user_info(self, author: Dict) -> Dict:
         return {"nickname": author.get("nickname", ""), "signature": author.get("signature", "")}
@@ -472,7 +569,6 @@ class DouyinCrawler:
 
             video_url = (play_addr.get("url_list") or [None])[0]
             if not video_url: return None
-
             return {
                 "aweme_id": aweme.get("aweme_id"), "title": title, "desc": aweme.get("desc"),
                 "create_time": aweme.get("create_time"), "author": aweme.get("author", {}).get("nickname"),

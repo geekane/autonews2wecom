@@ -1,5 +1,8 @@
-openpyxl
+﻿openpyxl
 playwright
 pandas
 requests
 lark-oapi
+gmssl
+python-dotenv
+ffmpeg-python

@@ -64,13 +64,20 @@ def get_tenant_access_token(app_id, app_secret):
         return None
 
 def parse_rich_text(field_value):
-    if not isinstance(field_value, list):
-        return str(field_value)
-    text_parts = []
-    for item in field_value:
-        if item.get("type") == "text":
-            text_parts.append(item.get("text", ""))
-    return "".join(text_parts)
+    if not field_value:
+        return ""
+    if isinstance(field_value, dict):
+        val = field_value.get("value", field_value)
+        return parse_rich_text(val)
+    if isinstance(field_value, list):
+        text_parts = []
+        for item in field_value:
+            if isinstance(item, dict):
+                text_parts.append(item.get("text", str(item)))
+            else:
+                text_parts.append(str(item))
+        return "".join(text_parts)
+    return str(field_value)
 
 def get_daily_info_with_links(access_token):
     headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
@@ -100,10 +107,12 @@ def get_daily_info_with_links(access_token):
             for item in items:
                 fields = item.get('fields', {})
                 info_raw = fields.get('完整信息内容')
-                link = fields.get('视频链接')
+                link_raw = fields.get('视频链接')
                 if info_raw:
                     info_text = parse_rich_text(info_raw).strip()
-                    info_data.append({"content": info_text, "link": link})
+                    link_text = parse_rich_text(link_raw).strip()
+                    if info_text:
+                        info_data.append({"content": info_text, "link": link_text})
             if data.get('has_more'):
                 page_token = data.get('page_token')
             else:
@@ -111,8 +120,36 @@ def get_daily_info_with_links(access_token):
         except Exception as e:
             print(f"查询记录时网络请求失败: {e}")
             break
-    print(f"飞书查询完成，共找到 {len(info_data)} 条内部观点。")
+
+    # 若昨日没有新数据，自动回退获取最新的观点数据，避免日报内部观点为空
+    if not info_data:
+        print("提示：昨日未监测到新观点数据，自动获取最近更新的博主观点...")
+        payload_fallback = {
+            "field_names": ["完整信息内容", "视频链接", "发布日期"],
+            "sort": [{"field_name": "发布日期", "desc": True}],
+            "page_size": 20
+        }
+        try:
+            response = requests.post(SEARCH_RECORDS_URL, json=payload_fallback, headers=headers)
+            result = response.json()
+            items = result.get("data", {}).get("items", [])
+            for item in items:
+                fields = item.get('fields', {})
+                info_raw = fields.get('完整信息内容')
+                link_raw = fields.get('视频链接')
+                if info_raw:
+                    info_text = parse_rich_text(info_raw).strip()
+                    link_text = parse_rich_text(link_raw).strip()
+                    if info_text:
+                        info_data.append({"content": info_text, "link": link_text})
+                if len(info_data) >= 5:
+                    break
+        except Exception as e:
+            print(f"回退获取历史记录网络请求失败: {e}")
+
+    print(f"飞书查询完成，共获取 {len(info_data)} 条内部观点。")
     return info_data
+
 
 def get_industry_news():
     """
