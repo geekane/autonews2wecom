@@ -79,11 +79,15 @@ DEFAULT_BACKUP_COOKIE = (
     "passport_csrf_token=5c0076574bf79c59609a661d6630d319; "
     "passport_csrf_token_default=5c0076574bf79c59609a661d6630d319; "
     "enter_pc_once=1; "
-    "ttwid=1%7CR8ojIxy17ufBcgFO7YxUHGjFRpQO1g-pzO2tUah3lNs%7C1790129700%7C6bd6140e50994398f43e9a56922e00c0a37ca65e6fca00421718d5e6a1a47842; "
-    "sessionid=656e76c91082efe121cf57b0380843d0; "
-    "sid_tt=656e76c91082efe121cf57b0380843d0; "
+    "ttwid=1%7CR8ojIxy17ufBcgFO7YxUHGjFRpQO1g-pzO2tUah3lNs%7C1791544644%7Cc94532676b325b13c2ca9810aafd87dfd70ff3a1bb30ad01128a805b8cc5566c; "
+    "sessionid=9c8b41c382d5bf7d2240cecd38875e80; "
+    "sessionid_ss=9c8b41c382d5bf7d2240cecd38875e80; "
+    "sid_tt=9c8b41c382d5bf7d2240cecd38875e80; "
+    "uid_tt=0f5106f91348ad02f0dc7920e19954d7; "
+    "uid_tt_ss=0f5106f91348ad02f0dc7920e19954d7; "
     "is_dash_user=1; "
-    "UIFID=8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fecfd74a49fbc4b4910fe525d6e59c7d1ed04ec3d996cba72cef3fc60d07f5ff6e4c7074d00374568e4985f86cd64d954cacc48479271b025dac4bfe65dca42764b67e536114a7d70e296019bfb89d03ed081b754120fc101808668db14b85d016025d4da52ab36bc9a27f3b6026228ceb6950228c69c0dbe37205402f552ab44c4"
+    "UIFID=8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fecfd74a49fbc4b4910fe525d6e59c7d1ed04ec3d996cba72cef3fc60d07f5ff6e4c7074d00374568e4985f86cd64d954cacc48479271b025dac4bfe65dca42764b67e536114a7d70e296019bfb89d03ed081b754120fc101808668db14b85d016025d4da52ab36bc9a27f3b6026228ceb6950228c69c0dbe37205402f552ab44c4; "
+    "msToken=L7xltww53PAOpkCow-XTbMIKRPvrLgPcmkN95mxGF07hlrOeNnc2Qf5yBtBUvLPEoS6yBrFoamZvFmpx0p9pnnUVkng0tr0lYvh_MJkVqvRCQSHPW8cwWFaxHE5vUxAIqaAkvBN01P3GHxGSXG2FUZUBBlxeI8mNR2h_8keD1QGg"
 )
 
 def parse_cookie_to_dict(cookie_str: str) -> Dict[str, str]:
@@ -156,7 +160,7 @@ def load_douyin_cookies() -> List[str]:
 def get_api_headers(cookie_str: str, referer: str = "https://www.douyin.com/") -> Dict[str, str]:
     """生成带有当前有效 Cookie 的完整仿真请求头"""
     c_dict = parse_cookie_to_dict(cookie_str)
-    uifid = c_dict.get("UIFID") or c_dict.get("UIFID_TEMP") or "8a94356f87650fa0412c61e664858f58"
+    uifid = c_dict.get("UIFID") or c_dict.get("UIFID_TEMP") or "8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fecfd74a49fbc4b4910fe525d6e59c7d1ed04ec3d996cba72cef3fc60d07f5ff6e4c7074d00374568e4985f86cd64d954cacc48479271b025dac4bfe65dca42764b67e536114a7d70e296019bfb89d03ed081b754120fc101808668db14b85d016025d4da52ab36bc9a27f3b6026228ceb6950228c69c0dbe37205402f552ab44c4"
     return {
         'accept': 'application/json, text/plain, */*',
         'accept-language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -178,14 +182,15 @@ def get_api_headers(cookie_str: str, referer: str = "https://www.douyin.com/") -
 
 def build_signed_aweme_post_url(sec_user_id: str, max_cursor: Any, cookie_str: str, domain: str = "www.douyin.com") -> str:
     """
-    ★ 核心：纯算法实时计算当前时间戳与 a_bogus，绝无静态硬编码，彻底根治隔天 403
+    ★ 核心：纯算法实时计算当前时间戳、a_bogus 与 x-secsdk-web-signature 双签名，彻底解决 403 拦截
     """
+    import hashlib
     c_dict = parse_cookie_to_dict(cookie_str)
     cur_ts = str(int(time.time()))
     verify_fp = c_dict.get("s_v_web_id") or "verify_mudh01t1_h07pN9qI_Tkwn_4m3J_B6Cs_NkzxVZZVmVB2"
     webid = c_dict.get("webid") or "7687924326851266111"
-    uifid = c_dict.get("UIFID") or c_dict.get("UIFID_TEMP") or ""
-    ms_token = c_dict.get("msToken") or ""
+    uifid = c_dict.get("UIFID") or c_dict.get("UIFID_TEMP") or "8a94356f87650fa0412c61e664858f589013fe72dff3760b5026535a4ef20fecfd74a49fbc4b4910fe525d6e59c7d1ed04ec3d996cba72cef3fc60d07f5ff6e4c7074d00374568e4985f86cd64d954cacc48479271b025dac4bfe65dca42764b67e536114a7d70e296019bfb89d03ed081b754120fc101808668db14b85d016025d4da52ab36bc9a27f3b6026228ceb6950228c69c0dbe37205402f552ab44c4"
+    ms_token = c_dict.get("msToken") or "L7xltww53PAOpkCow-XTbMIKRPvrLgPcmkN95mxGF07hlrOeNnc2Qf5yBtBUvLPEoS6yBrFoamZvFmpx0p9pnnUVkng0tr0lYvh_MJkVqvRCQSHPW8cwWFaxHE5vUxAIqaAkvBN01P3GHxGSXG2FUZUBBlxeI8mNR2h_8keD1QGg"
 
     params = [
         ("device_platform", "webapp"),
@@ -196,7 +201,7 @@ def build_signed_aweme_post_url(sec_user_id: str, max_cursor: Any, cookie_str: s
         ("locate_item_id", "7524995207487720763"),
         ("locate_query", "false"),
         ("show_live_replay_strategy", "1"),
-        ("need_time_list", "0"),
+        ("need_time_list", "1"),
         ("time_list_query", "0"),
         ("whale_cut_token", ""),
         ("cut_version", "1"),
@@ -212,44 +217,47 @@ def build_signed_aweme_post_url(sec_user_id: str, max_cursor: Any, cookie_str: s
         ("version_code", "290100"),
         ("version_name", "29.1.0"),
         ("cookie_enabled", "true"),
-        ("screen_width", "1920"),
-        ("screen_height", "1080"),
+        ("screen_width", "1536"),
+        ("screen_height", "864"),
         ("browser_language", "zh-CN"),
         ("browser_platform", "Win32"),
         ("browser_name", "Edge"),
-        ("browser_version", "153.0.0.0"),
+        ("browser_version", "154.0.0.0"),
         ("browser_online", "true"),
         ("engine_name", "Blink"),
-        ("engine_version", "153.0.0.0"),
+        ("engine_version", "154.0.0.0"),
         ("os_name", "Windows"),
         ("os_version", "10"),
         ("device_memory", "32"),
         ("platform", "PC"),
-        ("downlink", "1.45"),
-        ("effective_type", "3g"),
-        ("round_trip_time", "450"),
+        ("downlink", "10"),
+        ("effective_type", "4g"),
+        ("round_trip_time", "100"),
         ("webid", webid),
         ("uifid", uifid),
-        ("msToken", ms_token),
         ("verifyFp", verify_fp),
         ("fp", verify_fp),
-        ("timestamp", cur_ts),
+        ("msToken", ms_token),
     ]
 
-    query_str = urllib.parse.urlencode(params)
+    raw_qs = urllib.parse.urlencode(params)
     base_url = f"https://{domain}/aweme/v1/web/aweme/post/"
 
     if abogus_v20 and hasattr(abogus_v20, "encrypt"):
         try:
-            a_bogus = abogus_v20.encrypt(BROWSER_USER_AGENT, query_str, "")
+            a_bogus = abogus_v20.encrypt(BROWSER_USER_AGENT, raw_qs, "")
             quoted_ab = urllib.parse.quote(a_bogus, safe="")
-            return f"{base_url}?{query_str}&a_bogus={quoted_ab}"
+            nq = f"{raw_qs}&a_bogus={quoted_ab}&timestamp={cur_ts}"
+            SALT = "A96D855A08C0A9707F8BEF0D9A527E4E"
+            inp = f"{uifid}_{cur_ts}_{SALT}_{nq}"
+            secsdk_sig = hashlib.md5(inp.encode("utf-8")).hexdigest()
+            return f"{base_url}?{nq}&x-secsdk-web-signature={secsdk_sig}"
         except Exception as e:
-            print(f"⚠️ [a_bogus 计算发生异常]: {e}，将尝试原生查询参数")
-            return f"{base_url}?{query_str}"
+            print(f"⚠️ [双签名计算发生异常]: {e}，将尝试原生查询参数")
+            return f"{base_url}?{raw_qs}&timestamp={cur_ts}"
     else:
         print("⚠️ [警告] 未检测到 abogus_v20 模块，将直接发送无签名请求")
-        return f"{base_url}?{query_str}"
+        return f"{base_url}?{raw_qs}&timestamp={cur_ts}"
 
 # --- 日志记录辅助函数 ---
 def log_message(log_list, message):
